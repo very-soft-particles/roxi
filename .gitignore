@@ -6,3 +6,7 @@ build/**
 **/ninja-build/**
 projects/**
 external/lua/**
+tags
+gmon.out
+notes.txt
+compile_commands.json
