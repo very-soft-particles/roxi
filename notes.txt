@@ -1,3 +1,0 @@
-RLSL files -> RenderGraph (GPU Graph?) / SystemGraph to generate internal job synchronization
-
-eg: create dependency jobs that will wait on their dependencies before launching the dependent jobs
