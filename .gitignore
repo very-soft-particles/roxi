@@ -1,6 +1,8 @@
 **/*.swp
 **/*.swo
 build/**
-ninja-build/**
+**/ninja-build/**
+build/**
+**/ninja-build/**
 projects/**
 external/lua/**
