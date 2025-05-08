@@ -10,3 +10,5 @@ tags
 gmon.out
 notes.txt
 compile_commands.json
+cache/**
+cmake/**
