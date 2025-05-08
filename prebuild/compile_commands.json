@@ -1,0 +1,27 @@
+[
+{
+  "directory": "C:/roxi/roxi_0.7/prebuild/ninja-build",
+  "command": "C:\\msys64\\mingw64\\bin\\c++.exe -IC:/roxi/roxi_0.7/prebuild/include -isystem C:/VulkanSDK/1.3.243.0/Include -std=gnu++20 -o CMakeFiles\\shader_config.dir\\shader_config.cpp.obj -c C:\\roxi\\roxi_0.7\\prebuild\\shader_config.cpp",
+  "file": "C:\\roxi\\roxi_0.7\\prebuild\\shader_config.cpp"
+},
+{
+  "directory": "C:/roxi/roxi_0.7/prebuild/ninja-build",
+  "command": "C:\\msys64\\mingw64\\bin\\c++.exe -IC:/roxi/roxi_0.7/prebuild/include -isystem C:/VulkanSDK/1.3.243.0/Include -std=gnu++20 -o CMakeFiles\\shader_config.dir\\include\\spirv_reflect.cpp.obj -c C:\\roxi\\roxi_0.7\\prebuild\\include\\spirv_reflect.cpp",
+  "file": "C:\\roxi\\roxi_0.7\\prebuild\\include\\spirv_reflect.cpp"
+},
+{
+  "directory": "C:/roxi/roxi_0.7/prebuild/ninja-build",
+  "command": "C:\\msys64\\mingw64\\bin\\c++.exe -IC:/roxi/roxi_0.7/prebuild/include -isystem C:/VulkanSDK/1.3.243.0/Include -std=gnu++20 -o CMakeFiles\\graphics_config.dir\\graphics_config.cpp.obj -c C:\\roxi\\roxi_0.7\\prebuild\\graphics_config.cpp",
+  "file": "C:\\roxi\\roxi_0.7\\prebuild\\graphics_config.cpp"
+},
+{
+  "directory": "C:/roxi/roxi_0.7/prebuild/ninja-build",
+  "command": "C:\\msys64\\mingw64\\bin\\c++.exe -IC:/roxi/roxi_0.7/prebuild/include -isystem C:/VulkanSDK/1.3.243.0/Include -std=gnu++20 -o CMakeFiles\\audio_config.dir\\audio_config.cpp.obj -c C:\\roxi\\roxi_0.7\\prebuild\\audio_config.cpp",
+  "file": "C:\\roxi\\roxi_0.7\\prebuild\\audio_config.cpp"
+},
+{
+  "directory": "C:/roxi/roxi_0.7/prebuild/ninja-build",
+  "command": "C:\\msys64\\mingw64\\bin\\c++.exe -IC:/roxi/roxi_0.7/prebuild/include -isystem C:/VulkanSDK/1.3.243.0/Include -std=gnu++20 -o CMakeFiles\\ecs_config.dir\\ecs_config.cpp.obj -c C:\\roxi\\roxi_0.7\\prebuild\\ecs_config.cpp",
+  "file": "C:\\roxi\\roxi_0.7\\prebuild\\ecs_config.cpp"
+}
+]

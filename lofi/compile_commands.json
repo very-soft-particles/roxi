@@ -1,0 +1,7 @@
+[
+{
+  "directory": "C:/LOFI/LOFI_1.1/ninja-build",
+  "command": "C:\\msys64\\mingw64\\bin\\c++.exe -static-libstdc++ -std=gnu++20 -o test\\CMakeFiles\\test.dir\\test.cpp.obj -c C:\\LOFI\\LOFI_1.1\\test\\test.cpp",
+  "file": "C:\\LOFI\\LOFI_1.1\\test\\test.cpp"
+}
+]

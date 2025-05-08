@@ -1,0 +1,8 @@
+C:/roxi/roxi_0.8/lofi/ninja-build/CMakeFiles/edit_cache.dir
+C:/roxi/roxi_0.8/lofi/ninja-build/CMakeFiles/rebuild_cache.dir
+C:/roxi/roxi_0.8/lofi/ninja-build/core/CMakeFiles/edit_cache.dir
+C:/roxi/roxi_0.8/lofi/ninja-build/core/CMakeFiles/rebuild_cache.dir
+C:/roxi/roxi_0.8/lofi/ninja-build/core/include/CMakeFiles/edit_cache.dir
+C:/roxi/roxi_0.8/lofi/ninja-build/core/include/CMakeFiles/rebuild_cache.dir
+C:/roxi/roxi_0.8/lofi/ninja-build/core/include/meta/CMakeFiles/edit_cache.dir
+C:/roxi/roxi_0.8/lofi/ninja-build/core/include/meta/CMakeFiles/rebuild_cache.dir

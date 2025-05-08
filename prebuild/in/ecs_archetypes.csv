@@ -1,0 +1,6 @@
+StaticRenderables,32,Position,Mesh,Collision,,,
+DynamicRenderables,32,Position,Velocity,Acceleration,Mesh,Collision,
+StaticObject,32,Position,Collision,,,,
+DynamicObject,32,Position,Velocity,Acceleration,Collision,,
+Player,4,Position,Velocity,Acceleration,Collision,Camera,
+PlayerWMesh,4,Position,Velocity,Acceleration,Mesh,Collision,Camera

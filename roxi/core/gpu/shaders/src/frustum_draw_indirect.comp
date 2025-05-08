@@ -1,0 +1,60 @@
+#version 460 core
+#include "../header/frustum_culling.glsl"
+#include "../spec_constants/frustum_param_spec_constant.glsl"
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+// iquilezles.org/articles/frustumcorrect/
+bool is_box_in_frustum(Frustum f, AABB box)
+{
+	// Check box outside/inside of frustum
+	for (int i = 0; i < 6; i++)
+	{
+		int r = 0;
+		r += (dot(f.planes[i], vec4(box.min_point.x, box.min_point.y, box.min_point.z, 1.0)) < 0.0) ? 1 : 0;
+		r += (dot(f.planes[i], vec4(box.max_point.x, box.min_point.y, box.min_point.z, 1.0)) < 0.0) ? 1 : 0;
+		r += (dot(f.planes[i], vec4(box.min_point.x, box.max_point.y, box.min_point.z, 1.0)) < 0.0) ? 1 : 0;
+		r += (dot(f.planes[i], vec4(box.max_point.x, box.max_point.y, box.min_point.z, 1.0)) < 0.0) ? 1 : 0;
+		r += (dot(f.planes[i], vec4(box.min_point.x, box.min_point.y, box.max_point.z, 1.0)) < 0.0) ? 1 : 0;
+		r += (dot(f.planes[i], vec4(box.max_point.x, box.min_point.y, box.max_point.z, 1.0)) < 0.0) ? 1 : 0;
+		r += (dot(f.planes[i], vec4(box.min_point.x, box.max_point.y, box.max_point.z, 1.0)) < 0.0) ? 1 : 0;
+		r += (dot(f.planes[i], vec4(box.max_point.x, box.max_point.y, box.max_point.z, 1.0)) < 0.0) ? 1 : 0;
+		if (r == 8)
+		{
+			return false;
+		}
+	}
+
+	// Check frustum outside/inside box
+	int r = 0;
+	r = 0; for (int i = 0; i < 8; i++) r += ((f.corners[i].x > box.max_point.x) ? 1 : 0); if (r == 8) return false;
+	r = 0; for (int i = 0; i < 8; i++) r += ((f.corners[i].x < box.min_point.x) ? 1 : 0); if (r == 8) return false;
+	r = 0; for (int i = 0; i < 8; i++) r += ((f.corners[i].y > box.max_point.y) ? 1 : 0); if (r == 8) return false;
+	r = 0; for (int i = 0; i < 8; i++) r += ((f.corners[i].y < box.min_point.y) ? 1 : 0); if (r == 8) return false;
+	r = 0; for (int i = 0; i < 8; i++) r += ((f.corners[i].z > box.max_point.z) ? 1 : 0); if (r == 8) return false;
+	r = 0; for (int i = 0; i < 8; i++) r += ((f.corners[i].z < box.min_point.z) ? 1 : 0); if (r == 8) return false;
+
+	return true;
+}
+
+void main()
+{
+  const uint param_id = GET_SPEC_CONSTANT(frustum_param);
+	uint idx = gl_GlobalInvocationID.x;
+
+	if (is_box_in_frustum(get_frustum(param_id), get_aabbs(param_id)[idx]))
+	{
+    ModelData model = get_models(param_id)[idx];
+    MeshData mesh_data = get_meshes(param_id)[model.mesh_id];
+
+    get_draw_indexed_indirect_commands(param_id)[idx].index_count = mesh_data.index_count;
+    get_draw_indexed_indirect_commands(param_id)[idx].first_index = mesh_data.first_index;
+    get_draw_indexed_indirect_commands(param_id)[idx].vertex_offset = int(mesh_data.vertex_offset);
+    get_draw_indexed_indirect_commands(param_id)[idx].first_instance = model.model_id;
+    get_draw_indexed_indirect_commands(param_id)[idx].instance_count = 1;
+	}
+	else
+	{
+		get_draw_indexed_indirect_commands(param_id)[idx].instance_count = 0;
+	}
+}

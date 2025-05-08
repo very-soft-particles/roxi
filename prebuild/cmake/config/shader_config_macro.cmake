@@ -1,0 +1,5 @@
+macro(generate_shader_config CONFIG_NAME)
+  add_executable(${CONFIG_NAME} "${CONFIG_NAME}.cpp" "${CONFIG_INCLUDE_PATH}spirv_reflect.cpp")
+  target_include_directories(${CONFIG_NAME} PUBLIC ${LOFI_INCLUDE_PATH} ${CONFIG_INCLUDE_PATH})
+  target_link_libraries(${CONFIG_NAME} PUBLIC Vulkan::Vulkan LOFI)
+endmacro()

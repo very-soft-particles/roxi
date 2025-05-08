@@ -1,0 +1,9 @@
+# EXAMPLE TYPE,# EXAMPLE USING NAME,# EXAMPLE CXX NAME,,,
+PRIMITIVE,u8,uint8_t,,,
+# EXAMPLE LOFI,# EXAMPLE USING NAME,# EXAMPLE LOFI NAME,# EXAMPLE TEMPLATE ARGS,,
+LOFI,Array,"lofi::mem::ArrayContainerPolicy<T, Size, 8, lofi::mem::StackAllocPolicy>",typename T,u64 Size,
+# EXAMPLE ENUM,# EXAMPLE ENUM NAME,# EXAMPLE ENUMERATIONS,,,
+ENUM,MyEnum,This,is,my,enumerator
+PRIMITIVE,MeshID,u32,,,
+ENUM,Resolution,Low,Mid,High,
+LOFI,BoundingBox,"lofi::tuple<float, float, float>",,,

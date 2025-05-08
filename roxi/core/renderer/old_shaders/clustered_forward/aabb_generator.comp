@@ -1,0 +1,91 @@
+// from HelloVulkan
+#version 460 core
+
+/*
+clustered_forward/aabb_generator.comp
+
+Based on www.aortiz.me/2018/12/21/CG.html
+*/
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+#include <clustered_forward/header.glsl>
+#include <aabb/aabb.glsl>
+
+layout(set = 0, binding = 0) buffer Clusters { AABB clusters []; }; // SSBO
+layout(set = 0, binding = 1) uniform CFUBO { ClusterForwardUBO ubo; }; // UBO
+
+// mynameismjp.wordpress.com/2009/03/10/reconstructing-position-from-depth/
+vec4 screen_to_view(vec4 screen)
+{
+	vec4 clip = vec4(
+		screen.x * 2.0 - 1.0,
+		screen.y * 2.0 - 1.0,
+		screen.z,
+		screen.w);
+	vec4 view = ubo.camera_inverse_projection * clip;
+
+	// Normalize
+	// stackoverflow.com/questions/25463735/w-coordinate-in-inverse-projection
+	view = view / view.w;
+
+	return view;
+}
+
+vec3 ray_intersect_z_plane(vec3 incident, float z_offset)
+{
+	return incident * z_offset / incident.z;
+}
+
+void main()
+{
+	// Eye position is zero in view space
+	const vec3 eye_pos = vec3(0.0);
+
+	uint tile_idx =
+		gl_WorkGroupID.x +
+		gl_WorkGroupID.y * gl_NumWorkGroups.x +
+		gl_WorkGroupID.z * gl_NumWorkGroups.x * gl_NumWorkGroups.y;
+
+	vec2 norm_per_tile_size = vec2(1.0 / float(ubo.slice_count_x),
+		1.0 / float(ubo.slice_count_y));
+
+	// Min and max point in screen space
+	// Top Right
+	vec4 max_ss = vec4(
+		(gl_WorkGroupID.x + 1.0) * norm_per_tile_size.x,
+		(gl_WorkGroupID.y + 1.0) * norm_per_tile_size.y,
+		0.0,
+		1.0);
+	// Bottom Left
+	vec4 min_ss = vec4(
+		gl_WorkGroupID.x * norm_per_tile_size.x,
+		gl_WorkGroupID.y * norm_per_tile_size.y,
+		0.0,
+		1.0);
+
+	// Min and max in view space
+	vec3 max_vs = screen_to_view(max_ss).xyz;
+	vec3 min_vs = screen_to_view(min_ss).xyz;
+
+	// Near and far of the cluster in view space
+	// This is Equation [2] in the Angel Ortiz article
+	float tile_near = -ubo.camera_near *
+		pow(ubo.camera_far / ubo.camera_near, float(gl_WorkGroupID.z) / ubo.slice_count_z);
+	float tile_far = -ubo.camera_near *
+		pow(ubo.camera_far / ubo.camera_near, float(gl_WorkGroupID.z + 1) / ubo.slice_count_z);
+
+	// Intersection points
+	vec3 min_near = ray_intersect_z_plane(min_vs, tile_near);
+	vec3 min_far = ray_intersect_z_plane(min_vs, tile_far);
+	vec3 max_near = ray_intersect_z_plane(max_vs, tile_near);
+	vec3 max_far = ray_intersect_z_plane(max_vs, tile_far);
+
+	// Note that adjacent clusters in the same z-slice overlap each other, 
+	// see Van Oosten thesis (Chapter 8, page 63-64)
+	vec3 min_aabb = min(min(min_near, min_far), min(max_near, max_far));
+	vec3 max_aabb = max(max(min_near, min_far), max(max_near, max_far));
+
+	clusters[tile_idx].min_point = vec4(min_aabb, 0.0);
+	clusters[tile_idx].max_point = vec4(max_aabb, 0.0);
+}

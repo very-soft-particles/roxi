@@ -1,0 +1,61 @@
+/
+/ from HelloVulkan
+//
+#version 460 core
+
+#include <draw_indirect_command.glsl>
+#include <frustum.glsl>
+#include <aabb/aabb.glsl>
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform F { Frustum frustum; };
+layout(set = 0, binding = 1) buffer B { AABB boxes[]; };
+layout(set = 0, binding = 2) buffer IDC { DrawIndirectCommand i_commands[]; };
+
+// iquilezles.org/articles/frustumcorrect/
+bool is_box_in_frustum(Frustum f, AABB box)
+{
+	// Check box outside/inside of frustum
+	for (int i = 0; i < 6; i++)
+	{
+		int r = 0;
+		r += (dot(f.planes[i], vec4(box.min_point.x, box.min_point.y, box.min_point.z, 1.0)) < 0.0) ? 1 : 0;
+		r += (dot(f.planes[i], vec4(box.max_point.x, box.min_point.y, box.min_point.z, 1.0)) < 0.0) ? 1 : 0;
+		r += (dot(f.planes[i], vec4(box.min_point.x, box.max_point.y, box.min_point.z, 1.0)) < 0.0) ? 1 : 0;
+		r += (dot(f.planes[i], vec4(box.max_point.x, box.max_point.y, box.min_point.z, 1.0)) < 0.0) ? 1 : 0;
+		r += (dot(f.planes[i], vec4(box.min_point.x, box.min_point.y, box.max_point.z, 1.0)) < 0.0) ? 1 : 0;
+		r += (dot(f.planes[i], vec4(box.max_point.x, box.min_point.y, box.max_point.z, 1.0)) < 0.0) ? 1 : 0;
+		r += (dot(f.planes[i], vec4(box.min_point.x, box.max_point.y, box.max_point.z, 1.0)) < 0.0) ? 1 : 0;
+		r += (dot(f.planes[i], vec4(box.max_point.x, box.max_point.y, box.max_point.z, 1.0)) < 0.0) ? 1 : 0;
+		if (r == 8)
+		{
+			return false;
+		}
+	}
+
+	// Check frustum outside/inside box
+	int r = 0;
+	r = 0; for (int i = 0; i < 8; i++) r += ((f.corners[i].x > box.max_point.x) ? 1 : 0); if (r == 8) return false;
+	r = 0; for (int i = 0; i < 8; i++) r += ((f.corners[i].x < box.min_point.x) ? 1 : 0); if (r == 8) return false;
+	r = 0; for (int i = 0; i < 8; i++) r += ((f.corners[i].y > box.max_point.y) ? 1 : 0); if (r == 8) return false;
+	r = 0; for (int i = 0; i < 8; i++) r += ((f.corners[i].y < box.min_point.y) ? 1 : 0); if (r == 8) return false;
+	r = 0; for (int i = 0; i < 8; i++) r += ((f.corners[i].z > box.max_point.z) ? 1 : 0); if (r == 8) return false;
+	r = 0; for (int i = 0; i < 8; i++) r += ((f.corners[i].z < box.min_point.z) ? 1 : 0); if (r == 8) return false;
+
+	return true;
+}
+
+void main()
+{
+	uint idx = gl_GlobalInvocationID.x;
+
+	if (is_box_in_frustum(frustum, boxes[idx]))
+	{
+		i_commands[idx].instance_count = 1;
+	}
+	else
+	{
+		i_commands[idx].instance_count = 0;
+	}
+}

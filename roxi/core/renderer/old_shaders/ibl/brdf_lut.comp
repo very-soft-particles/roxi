@@ -1,0 +1,71 @@
+#version 460 core
+
+/*
+Shader to generate BRDF Lookup Table.
+Based on 
+[1] https://learnopengl.com/PBR/IBL/Specular-IBL
+[2] https://github.com/SaschaWillems/Vulkan-glTF-PBR
+*/
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+layout (set = 0, binding = 0) buffer Output { float lut_table[]; };
+
+layout(push_constant) uniform PushConstantsBRDFLUT
+{
+	uint width;
+	uint height;
+	uint sample_count;
+}
+pc;
+
+#include <ibl/header.glsl>
+#include <pbr/pbr_header.glsl>
+#include <pbr/hammersley.glsl>
+
+vec2 brdf(float nov, float roughness)
+{
+	// Normal always points along z-axis
+	const vec3 n = vec3(0.0, 0.0, 1.0);
+	vec3 v = vec3(sqrt(1.0 - nov * nov), 0.0, nov);
+
+	vec2 lut = vec2(0.0);
+	for (uint i = 0u; i < pc.sample_count; i++)
+	{
+		vec2 xi = hammersley(i, pc.sample_count);
+		vec3 h = importance_sample_ggx(xi, n, roughness);
+		vec3 l = normalize(2.0 * dot(V, H) * H - V);
+
+		float dot_nl = max(dot(n, l), 0.0);
+
+		if (dot_nl > 0.0)
+		{
+			float dot_nv = max(dot(n, v), 0.0);
+			float dot_vh = max(dot(v, h), 0.0);
+			float dot_nh = max(dot(h, n), 0.0);
+
+			float alpha = alpha_ibl(roughness);
+			float g = geometry_schlick_ggx(dot_nl, dot_nv, alpha);
+			float g_vis = (G * dot_vh) / (dot_nh * dot_nv);
+			float fc = pow(1.0 - dot_vh, 5.0);
+			lut += vec2(
+				(1.0 - Fc) * g_vis, // NoV
+				fc * g_vis); // Roughness
+		}
+	}
+	return lut / float(pc.sample_count);
+}
+
+void main() 
+{
+	vec2 uv;
+	uv.x = (float(gl_GlobalInvocationID.x) + 0.5) / float(pc.width);
+	uv.y = (float(gl_GlobalInvocationID.y) + 0.5) / float(pc.height);
+
+	vec2 v = brdf(uv.x, 1.0 - uv.y);
+
+	uint offset = gl_GlobalInvocationID.y * pc.width + gl_GlobalInvocationID.x;
+
+	lut_table[offset * 2 + 0] = v.x;
+	lut_table[offset * 2 + 1] = v.y;
+}

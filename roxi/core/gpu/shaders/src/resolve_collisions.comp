@@ -1,0 +1,51 @@
+#version 460 core
+#include "../header/resolve_collisions.glsl"
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+void main() {
+
+  get_resolve_collisions_param();
+  uint idx = gl_GlobalInvocationID.x;
+
+  if(idx >= get_collisions_in.length()) {
+    return;
+  }
+
+  Collision collision_in = get_collisions_in()[idx];
+
+  vec3 obj_a_initial_position =
+    get_positions_in()[collision_in.obj_a];
+
+  vec3 obj_b_initial_position =
+    get_positions_in()[collision_in.obj_a];
+
+
+  vec3 current_position = get_positions_in()[idx];
+
+
+  float collision_radius = get_sphere_radii()[idx];
+
+  Collision collision_in = get_accelerations_in()[idx];
+  vec3 temp_vec = cross(current_accel, desired_direction);
+  float adjustment = dot(temp_vec, temp_vec);
+
+  cross(current_accel, desired_direction);
+
+  const float PI_OVER_4 = PI / 4;
+
+  float current_angle_x_y = adjustment + tan(current_accel.y / current_accel.x);
+  float current_angle_x_z = adjustment + tan(current_accel.z / current_accel.x);
+
+  get_accelerations_out()[idx].x = sin(PI_OVER_4 * current_angle_x_y);
+  get_accelerations_out()[idx].y = cos(PI_OVER_4 * current_angle_x_y);
+  get_accelerations_out()[idx].z = cos(PI_OVER_4 * current_angle_x_z);
+
+  vec3 current_vel = get_velocities_in()[idx];
+
+  get_velocities_out()[idx] = current_vel + current_accel;
+
+  vec3 current_position = get_positions_in()[idx];
+
+  get_positions_out()[idx] = current_position + current_vel;
+
+}

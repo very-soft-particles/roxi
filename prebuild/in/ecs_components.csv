@@ -1,0 +1,9 @@
+Position,u64,x,u64,y,u64,z
+Velocity,u64,x,u64,y,u64,z
+Acceleration,u64,x,u64,y,u64,z
+Mesh,MeshID,id,Resolution,res,,
+RenderableTag,,,,,,
+StaticCollisionTag,,,,,,
+DynamicCollisionTag,,,,,,
+Collision,BoundingBox,bounding_box,,,,
+Camera,f32,frustum_depth,,,,

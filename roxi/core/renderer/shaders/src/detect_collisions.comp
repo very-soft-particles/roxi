@@ -1,0 +1,40 @@
+
+#version 460 core
+#include "../header/resolve_collisions.glsl"
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+
+
+void main() {
+
+  get_detect_collisions_param();
+  uint idx = gl_GlobalInvocationID.x;
+
+  BucketInfo bucket_info = get_bucket_infos()[idx];
+
+  uint obj_idx_offset = bucket_info.obj_index_buffer_offset;
+
+  for(uint i = 0; i < bucket_info.obj_count; i++) {
+    uint obj_i_idx = get_obj_indices()[obj_idx_offset + i];
+    vec3 sphere_a_center = get_positions_in()[obj_i_idx];
+    float sphere_a_radius = get_sphere_radii()[obj_i_idx];
+    for(uint j = i + 1; j < bucket_info.obj_count; j++) {
+      uint obj_j_idx = get_obj_indices()[obj_idx_offset + j];
+      vec3 sphere_b_center = get_positions_in()[obj_j_idx]
+      float sphere_b_radius = get_sphere_radii()[obj_j_idx];
+
+      vec3 difference_vec = sphere_a_center - sphere_b_center;
+      float difference_length = dot(difference_vec, difference_vec);
+      float radii_sum = sphere_a_radius + sphere_b_radius;
+      float restitution = difference_length - radii_sum;
+      if(restitution < 0.f) {
+        uint collision_offset = atomicAdd(get_collision_counter(),
+          1);
+        get_collisions_out()[collision_offset].contact_normal = difference_vec;
+        get_collisions_out()[collision_offset].restitution = restitution;
+        get_collisions_out()[collision_offset].obj_a = obj_i_idx;
+        get_collisions_out()[collision_offset].obj_b = obj_j_idx;
+      }
+    }
+  }
+}

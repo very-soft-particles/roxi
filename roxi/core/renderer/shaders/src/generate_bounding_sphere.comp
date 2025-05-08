@@ -1,0 +1,23 @@
+#version 460 core
+#include "../header/sphere_render.glsl"
+#include "../spec_constants/sphere_render_spec_constant.glsl"
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+void main() {
+  get_generate_aabb_param_id();
+  const uint idx = gl_GlobalInvocationID.x;
+  vec3 position = get_positions()[idx];
+  float max_x = get_max()[idx];
+  float min_x = get_min()[idx];
+  if(abs(min_x) < max_x) {
+    get_bounding_spheres()[idx] 
+      = vec4(position,
+        max_x);
+  } else {
+    get_bounding_spheres()[idx] 
+      = vec4(position,
+        min_x);
+  }
+}
+

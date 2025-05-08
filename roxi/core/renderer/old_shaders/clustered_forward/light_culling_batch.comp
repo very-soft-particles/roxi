@@ -1,0 +1,108 @@
+// from HelloVulkan
+#version 460 core
+
+/*
+Based on www.aortiz.me/2018/12/21/CG.html
+
+Batched version of light culling for clustered forward shading.
+This should be a wee bit faster than the brute force version.
+*/
+
+layout(local_size_x = 16, local_size_y = 9, local_size_z = 4) in;
+
+#include <aabb/aabb.glsl>
+#include <light_data.glsl>
+#include <clustered_forward/header.glsl>
+
+// Note that if the number of intersecting lights is greater than this limit,
+// it'll cause a flickering artifact.
+#define MAX_LIGHTS_PER_CLUSTER 150
+
+shared LightData shared_lights[16 * 9 * 4] ;
+
+layout(set = 0, binding = 0) readonly buffer Clusters { AABB clusters[]; }; // SSBO
+layout(set = 0, binding = 1) readonly buffer Lights { LightData lights[]; }; // SSBO
+layout(set = 0, binding = 2) buffer AtomicCounter { uint global_idx; }; // SSBO 
+layout(set = 0, binding = 3) buffer LightCells { LightCell light_cells[]; }; // SSBO
+layout(set = 0, binding = 4) buffer LightIndices { uint light_indices[]; }; // SSBO (output)
+layout(set = 0, binding = 5) uniform CFUBO { ClusterForwardUBO ubo; }; // UBO
+
+float squared_distance_point_aabb(vec3 point, uint tile)
+{
+	AABB current_cell = clusters[tile];
+
+	float sq_dist = 0.0;
+	for (uint i = 0; i < 3; ++i)
+	{
+		float v = point[i];
+		if (v < current_cell.min_point[i])
+		{
+			float diff = current_cell.min_point[i] - v;
+			sq_dist += (diff * diff);
+		}
+		else if (v > current_cell.max_point[i])
+		{
+			float diff = current_cell.max_point[i] - v;
+			sq_dist += (diff * diff);
+		}
+	}
+
+	return sq_dist;
+}
+
+bool test_sphere_aabb(uint light_index, uint tile)
+{
+	float light_radius = shared_lights[light_index].radius;
+	vec4 pos_world = shared_lights[light_index].position;
+	vec4 pos_view = ubo.camera_view * pos_world;
+	float squared_distance = squared_distance_point_aabb(pos_view.xyz, tile);
+	return squared_distance < (light_radius * light_radius);
+}
+
+void main()
+{
+	uint thread_count = gl_WorkGroupSize.x * gl_WorkGroupSize.y * gl_WorkGroupSize.z;
+	uint light_count = lights.length();
+	uint num_batches = (light_count + thread_count - 1) / thread_count;
+
+	uint tile_idx = gl_LocalInvocationIndex +
+		gl_WorkGroupSize.x * gl_WorkGroupSize.y * gl_WorkGroupSize.z * gl_WorkGroupID.z;
+
+	uint light_iter = 0;
+	uint visible_light_indices[MAX_LIGHTS_PER_CLUSTER];
+
+	for (uint batch = 0; batch < num_batches; ++batch)
+	{
+		uint light_index = batch * thread_count + gl_LocalInvocationIndex;
+
+		// This if statement prevents index out of bound
+		// TODO Look for a better alternative
+		if (light_index < light_count)
+		{
+			shared_lights[gl_LocalInvocationIndex] = lights[light_index];
+		}
+
+		barrier();
+
+		for (uint i = 0; i < thread_count; ++i)
+		{
+			if (test_sphere_aabb(i, tile_idx))
+			{
+				visible_light_indices[light_iter] = batch * thread_count + i;
+				light_iter++;
+			}
+		}
+	}
+
+	barrier();
+
+	uint offset = atomicAdd(global_idx, light_iter);
+
+	for (uint i = 0; i < light_iter; ++i)
+	{
+		light_indices[offset + i] = visible_light_indices[i];
+	}
+
+	light_cells[tile_idx].offset = offset;
+	light_cells[tile_idx].count  = light_iter;
+}

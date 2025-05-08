@@ -1,0 +1,89 @@
+// from HelloVulkan
+#version 460 core
+
+/*
+Based on www.aortiz.me/2018/12/21/CG.html
+
+Brute force version of light culling for clustered forward shading.
+*/
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+#include <aabb/aabb.glsl>
+#include <light_data.glsl>
+#include <clustered_forward/header.glsl>
+
+// Note that if the number of intersecting lights is greater than this limit,
+// it'll cause a flickering artifact.
+#define MAX_LIGHTS_PER_CLUSTER 150
+
+layout(set = 0, binding = 0) readonly buffer Clusters { AABB clusters[]; }; // SSBO (input)
+layout(set = 0, binding = 1) readonly buffer Lights { LightData lights[]; }; // SSBO (input)
+layout(set = 0, binding = 2) buffer AtomicCounter { uint global_idx; }; // SSBO 
+layout(set = 0, binding = 3) buffer LightCells { LightCell light_cells[]; }; // SSBO (output)
+layout(set = 0, binding = 4) buffer LightIndices { uint light_indices[]; }; // SSBO (output)
+layout(set = 0, binding = 5) uniform CFUBO { ClusterForwardUBO ubo; }; // UBO
+
+float squared_distance_point_aabb(vec3 point, uint tile)
+{
+	AABB current_cell = clusters[tile];
+
+	float sq_dist = 0.0;
+	for (uint i = 0; i < 3; ++i)
+	{
+		float v = point[i];
+		if (v < current_cell.min_point[i])
+		{
+			float diff = current_cell.min_point[i] - v;
+			sq_dist += (diff * diff);
+		}
+		else if (v > current_cell.max_point[i])
+		{
+			float diff = current_cell.max_point[i] - v;
+			sq_dist += (diff * diff);
+		}
+	}
+
+	return sq_dist;
+}
+
+bool test_sphere_aabb(uint light_idx, uint tile)
+{
+	float light_radius = lights[light_idx].radius;
+	vec4 pos_world = lights[light_idx].position;
+	vec4 pos_view = ubo.camera_view * pos_world;
+	float squared_distance = squared_distance_point_aabb(pos_view.xyz, tile);
+
+	return squared_distance < (light_radius * light_radius);
+}
+
+void main()
+{
+	uint tile_idx =
+		gl_WorkGroupID.x +
+		gl_WorkGroupID.y * gl_NumWorkGroups.x +
+		gl_WorkGroupID.z * gl_NumWorkGroups.x * gl_NumWorkGroups.y;
+
+	uint visible_light_indices[MAX_LIGHTS_PER_CLUSTER];
+
+	uint num_all_lights = lights.length();
+
+	uint light_iter = 0;
+	for (uint i = 0; i < num_all_lights && light_iter < MAX_LIGHTS_PER_CLUSTER; ++i)
+	{
+		if (test_sphere_aabb(i, tile_idx))
+		{
+			visible_light_indices[light_iter++] = i;
+		}
+	}
+
+	uint offset = atomicAdd(global_idx, light_iter);
+
+	for (uint i = 0; i < light_iter; ++i)
+	{
+		light_indices[offset + i] = visible_light_indices[i];
+	}
+
+	light_cells[tile_idx].offset = offset;
+	light_cells[tile_idx].count  = light_iter;
+}

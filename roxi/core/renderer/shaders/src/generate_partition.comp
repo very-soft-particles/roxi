@@ -1,0 +1,13 @@
+#version 460 core
+#include "../header/generate_partitions.glsl"
+#include "../spec_constants/physics_param_spec_constant.glsl"
+
+void main() {
+
+  const uint param_id =
+    GET_SPEC_CONSTANT(physics_param);
+
+
+
+
+}
