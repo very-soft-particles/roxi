@@ -450,7 +450,7 @@ b8 RenderPassBuilder::build(Context* context, RenderPass* render_pass) const {
     
     FramebufferCreation& FramebufferCreation::set_render_pass( const RenderPass* render_pass )
     {
-      RX_TRACEF("setting render pass at %llu", PTR2INT(render_pass));
+      RX_TRACEF("setting render pass at %llu", PTR2INT(render_pass->get_render_pass()));
       _render_pass = render_pass;
     
       return *this;

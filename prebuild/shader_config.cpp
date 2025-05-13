@@ -100,13 +100,11 @@ struct ShaderInfo {
 };
 
 
-//
 //lofi::mem::ArrayContainerPolicy<VkPipelineLayoutInfo, 256, 8, lofi::mem::MAllocPolicy> shader_infos;
 //lofi::mem::ArrayContainerPolicy<VkVertexInputInfo, 256, 8, lofi::mem::MAllocPolicy> vertex_input_infos;
 //lofi::mem::ArrayContainerPolicy<VkVertexOutputInfo, 256, 8, lofi::mem::MAllocPolicy> vertex_output_infos;
 //lofi::mem::ArrayContainerPolicy<VkFragmentInputInfo, 256, 8, lofi::mem::MAllocPolicy> fragment_input_infos;
 //lofi::mem::ArrayContainerPolicy<VkFragmentOutputInfo, 256, 8, lofi::mem::MAllocPolicy> fragment_output_infos;
-
 
 
 lofi::mem::ArrayContainerPolicy<ShaderInfo, 256, 8, lofi::mem::MAllocPolicy> shader_modules;
@@ -160,8 +158,8 @@ static const lofi::String get_vk_descriptor_binding_type_string(SpvReflectDescri
   else {
     return lofi::str_cstring("ROXI_TYPE_NOT_SUPPORTED");
   }
-
 }
+
 static const lofi::String get_vk_pipeline_stage_flags_string(auto* arena, SpvReflectShaderStageFlagBits spv_refl_flags) {
   lofi::StringList list{};
   if(spv_refl_flags & SPV_REFLECT_SHADER_STAGE_VERTEX_BIT) {
@@ -401,12 +399,12 @@ b8 parse_spirv_file(const char* file_path) {
     return false;
   }
 
-  lofi::String shader_path = lofi::str_cstring(file_path);
+  lofi::String shader_path = lofi::String{file_path};
   const u64 period_offset = lofi::str_find_next_last('.', 2, shader_path);
 #if (OS_WINDOWS)
   const u32 slash_offset = lofi::str_find_last('\\', shader_path);
 #elif (OS_MAC || OS_LINUX)
-  const u32 slash_Offset = lofi::str_find_last('/', shader_path);
+  const u32 slash_offset = lofi::str_find_last('/', shader_path);
 #endif
   shader_path = lofi::str8_prefix(shader_path, period_offset);
   shader_path = lofi::str8_postfix(shader_path, slash_offset);
@@ -415,6 +413,7 @@ b8 parse_spirv_file(const char* file_path) {
   info->shader_name.str = (u8*)info->string_buffer;
   info->shader_name.size = 0;
   lofi::str_copy(shader_path, &info->shader_name, 256);
+  info->shader_name.size -= 1;
   auto* sets_begin = sets.push(1);
   auto* inputs_begin = inputs.push(1);
   auto* outputs_begin = outputs.push(1);
@@ -518,7 +517,7 @@ b8 write_cpp_file(const char* file_path) {
         file << lofi::NewLine << lofi::Tab << lofi::Tab << lofi::Tab << lofi::Tab;
       }
     }
-    for(u64 j = 0; j < shader_modules[i].shader_name.size; j++) {
+    for(u64 j = 0; j < shader_modules[i].shader_name.size - 1; j++) {
       PRINT("%c", shader_modules[i].shader_name.str[j]);
     }
     PRINT_S("\n");

@@ -14,6 +14,7 @@
 //
 // =====================================================================================
 #pragma once
+#include "error.h"
 #include "rx_gpu_device.hpp"
 #include "rx_vocab.h"
 #include "vk_buffer.hpp"
@@ -165,21 +166,19 @@ namespace roxi {
     vk::ResourcePool::BufferHandle                               _ubo_handle;
     vk::ResourcePool::BufferHandle                            _params_handle;
 
-    GPUDevice::FenceHandle                                          _transfer_fence;
+    GPUDevice::LoaderHandle                                   _loader_handle;
+
+    GPUDevice::FenceHandle                                       _copy_fence;
 
     // resets command buffer, must only be called once per frame
     vk::CommandBuffer get_primary_command_buffer(const frame::ID frame_id) {
       vk::CommandPool& pool = get_command_pool(get_pool_handle(frame_id));
       pool.reset();
-      return pool.obtain_command_buffer(pool.obtain_command_arena());
+      return pool.obtain_primary_command_buffer();
     }
 
     // only will get a secondary command buffer if get_primary_command_buffer has already been
     // called at least once for this frame, ie: must get primary buffer first for this frame
-    vk::CommandBuffer get_secondary_command_buffer(const frame::ID frame_id) {
-      auto& pool = get_command_pool(get_pool_handle(frame_id));
-      return pool.obtain_command_buffer(pool.obtain_command_arena());
-    }
 
     static const u32 get_pool_handle(const frame::ID frame_id) {
       return frame_id % RenderFrameCount;
@@ -193,11 +192,6 @@ namespace roxi {
       RX_TRACE("creating commands");
       RX_CHECK(create_commands(RenderFrameCount)
         , "failed to create commands in TestRenderer");
-
-      RX_TRACE("creating descriptors");
-      RX_CHECK(create_descriptors(2, 0, 0, 0)
-        , "failed to create commands in TestRenderer");
-
       struct VertexUBO {
         alignas(16)
           glm::vec3 vertex_positions[3];
@@ -247,6 +241,7 @@ namespace roxi {
       RX_TRACE("unmapping host ubo");
       ubo.unmap();
 
+      _render_target_handles_begin = 0;
       RX_TRACE("obtaining render target from resource pool to generate colour attachment info");
       vk::Image render_target = get_resource_pool().obtain_image(_render_target_handles_begin);
       vk::RenderPassInfo render_pass_info{};
@@ -269,7 +264,6 @@ namespace roxi {
       RX_TRACE("creating pipelines");
       RX_CHECK(create_pipelines(1, 1, &info, &render_pass_info)
         , "failed to create commands in TestRenderer");
-
       RX_TRACEF("VkRenderPass in TestRenderer = %llu", PTR2INT(get_pipeline_pool().obtain_render_pass(_render_pass_handle).get_render_pass()));
 
       vk::FramebufferCreation framebuffer_creations[RenderFrameCount];
@@ -284,58 +278,67 @@ namespace roxi {
 
       RX_TRACE("creating framebuffers");
       _framebuffer_handles_begin = create_framebuffers(RenderFrameCount, framebuffer_creations);
+      RX_TRACE("creating descriptors");
+      RX_CHECK(create_descriptors(1, 0, 0, 0)
+        , "failed to create commands in TestRenderer");
 
       RX_TRACE("allocating uniform descriptor");
-      vk::DescriptorAllocation ubo_descriptor = get_descriptor_pool().allocate<vk::DescriptorBufferType::Uniform>(1);
+      vk::DescriptorAllocation ubo_descriptor = get_descriptor_pool().allocate(vk::DescriptorBufferType::Uniform, 1);
 
       draw_params.vertex_buffer_id = ubo_descriptor.get_buffer_id();
 
       RX_TRACE("allocating transfer buffer");
-      void* transfer_ptr = transfer_allocate(ubo_descriptor.size);
 
-      RX_CHECK(transfer_ptr != nullptr, "failed to allocate descriptor data for vertex ubo in TestRenderer");
+      _copy_fence = device->create_fence();
+      _loader_handle = device->create_loader(handle);
 
+      GPUDevice::Loader loader = device->obtain_loader(_loader_handle);
+
+      GPUDevice::TransferAllocation transfer_allocation = loader.allocate(device, ubo_descriptor.size);
+
+      RX_TRACEF("transfer data: ptr = %llx, offset = %u", PTR2INT(transfer_allocation.mapped_pointer), transfer_allocation.offset);
+
+      void* transfer_ptr = (void*)((u8*)transfer_allocation.get_allocation_at_offset());
+      RX_CHECK(transfer_allocation.mapped_pointer != nullptr, "failed to allocate descriptor data for vertex ubo in TestRenderer");
+
+      RX_TRACE("getting descriptor");
       RX_CHECK(get_descriptor_pool().get_descriptor(ubo, gpu::BufferType::HostUniformBuffer, ubo_descriptor,
-            transfer_ptr)
+            (u8*)transfer_ptr)
           , "failed to get descriptor for TestDrawParams in TestRenderer::init()");
 
-      const vk::Buffer& ubo_descriptor_buffer = get_descriptor_pool().get_descriptor_buffer<vk::DescriptorBufferType::Uniform>();
+      RX_TRACE("getting ubo descriptor buffer");
+      const vk::Buffer& ubo_descriptor_buffer = get_descriptor_pool().get_descriptor_buffer(vk::DescriptorBufferType::Uniform);
 
-      const vk::Buffer& transfer_src_buffer = get_transfer_source_buffer(transfer_ptr);
-
-      const u32 transfer_src_offset = get_transfer_source_offset(transfer_ptr);
-
-      vk::CommandPool& chosen_command_pool = get_command_pool(0);
-      vk::CommandBuffer command_buffer = chosen_command_pool.obtain_command_buffer(chosen_command_pool.obtain_command_arena());
+      RX_TRACE("loader.transfer");
+      loader.transfer(device);
 
       VkBufferCopy copy_info{};
       copy_info.dstOffset = ubo_descriptor.offset;
-      copy_info.srcOffset = transfer_src_offset;
+      copy_info.srcOffset = transfer_allocation.offset;
       copy_info.size = ubo_descriptor.size;
 
-      RX_TRACE("recording copy command buffer");
-      command_buffer
+      RX_TRACE("recording copy commands");
+      vk::CommandBuffer copy_descriptors_cmd = get_command_pool(0).obtain_primary_command_buffer();
+      copy_descriptors_cmd
         .begin()
-        .record_copy_buffer(transfer_src_buffer, ubo_descriptor_buffer, 1, &copy_info)
+        .record_copy_buffer(*transfer_allocation.transfer_buffer, get_descriptor_pool().get_descriptor_buffer(vk::DescriptorBufferType::Uniform), 1, &copy_info)
         .end();
 
-      RX_TRACE("submitting copy command buffer");
-      submit_transfer(command_buffer, get_transfer_semaphore(transfer_ptr));
+      RX_TRACE("submitting copy");
+      submit_immediate(copy_descriptors_cmd, loader.get_signal_semaphore_handle(), _copy_fence);
 
-      RX_TRACE("waiting for transfer to complete");
-      wait_for_transfer_completion();
+      RX_TRACE("waiting for fence");
+      device->wait_for_fence(_copy_fence);
 
-      reset_transfer_fence();
+      get_command_pool(0).reset();
 
-      RX_CHECK(chosen_command_pool.reset()
-          , "failed to reset command pool used for copy commands in TestRenderer::init()");
-        
+      RX_TRACE("exiting TestRenderer::init()");
       RX_END();
     }
 
     b8 update(const frame::ID frame_id) {
       RX_TRACEF("getting TestRenderer primary rendering command buffer for frame = %llu", frame_id);
-      vk::CommandBuffer command_buffer = get_primary_command_buffer(frame_id);
+      vk::CommandBuffer command_buffer = get_command_pool(frame_id).obtain_primary_command_buffer();
       RX_TRACEF("recording rendering command buffer for frame = %llu", frame_id);
       command_buffer
         .begin()
@@ -346,8 +349,8 @@ namespace roxi {
             , get_current_extent().value.height
             , obtain_framebuffer(_framebuffer_handles_begin + frame_id)
           )
-        .bind_descriptor_pool(get_descriptor_pool())
         .bind_pipeline(get_pipeline_pool().obtain_pipeline(_draw_pipeline_handle))
+        .bind_descriptor_pool(get_descriptor_pool())
         .record_draw(3, 1)
         .end_render_pass()
         .end();

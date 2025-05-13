@@ -243,7 +243,7 @@ namespace roxi {
       VkGraphicsPipelineCreateInfo create_info{};
       create_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
       create_info.pNext = nullptr;
-      create_info.flags = 0;
+      create_info.flags = VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
       create_info.pMultisampleState = &_multisampling;
       create_info.pStages = _shader_stages.get_buffer();
       create_info.stageCount = _shader_stages.get_size();
@@ -482,6 +482,7 @@ namespace roxi {
 
     const PipelinePool::PipelineHandle PipelinePoolBuilder::add_pipeline(const PipelineInfo info) {
         if (get_pipeline_type_from_dispatch_type(info.type) == PipelineType::Graphics) {
+          RX_TRACEF("vertex shader name in add_pipeline = %s", info.graphics.vertex_shader_name);
           const auto result = _graphics_pipelines.get_size();
           *(_graphics_pipelines.push(1)) = add_graphics_pipeline(info);
           return result;
@@ -579,21 +580,25 @@ namespace roxi {
       // ubo, storage buffer, texture, storage image
       const u32 set_count = 4;
       DescriptorSetLayoutCreation descriptor_creation{};
+      RX_TRACE("initializing descriptor layout creation");
       descriptor_creation.init();
       descriptor_creation.set_flags(
         VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT
         // ?? | VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT
       );
+      RX_TRACEF("creating descriptors, set count = %u", set_count);
       for(u32 i = 0; i < set_count; i++) {
         binding.descriptorType = get_descriptor_type((vk::DescriptorBufferType)i);
         binding.binding = 0;
         // all descriptor buffers are device side, but the buffers themselves can be host side
         // indexing is handled by a combination of push constant and draw param uniform buffers
         descriptor_creation.add_binding(binding);
+        RX_TRACEF("creating descriptor %u", i);
         pool->_descriptor_set_layouts[i].init(_context, descriptor_creation);
         descriptor_creation.clear_bindings();
       }
 
+      RX_TRACE("creating specialization infos");
       // one binding per set
       Array<VkSpecializationMapEntry> specialization_infos{buffer};
       buffer += sizeof(VkSpecializationMapEntry) * specialization_constant_count;
@@ -617,11 +622,13 @@ namespace roxi {
       spec_info.mapEntryCount = specialization_constant_count;
       spec_info.pMapEntries = specialization_begin;
 
+      RX_TRACE("creating push constant range");
       VkPushConstantRange pc_range{};
       pc_range.offset = 0;
       pc_range.size = sizeof(pc::FrameParams);
       pc_range.stageFlags = VK_SHADER_STAGE_ALL;
 
+      RX_TRACE("creating pipeline layout");
       VkPipelineLayout pipeline_layout = create_pipeline_layout(_context, pool->_descriptor_set_layouts, set_count, &pc_range, 1);
 
       Array<VkGraphicsPipelineCreateInfo> 
@@ -636,6 +643,7 @@ namespace roxi {
 
       pc_range.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
+      RX_TRACE("creating pipelines");
       for(u64 i = 0; i < compute_pipeline_count; i++) {
         PipelineCreation<PipelineType::Compute> creation = _compute_pipelines[i];
         RX_CHECK(creation.get_dispatch_type() != DispatchType::Max

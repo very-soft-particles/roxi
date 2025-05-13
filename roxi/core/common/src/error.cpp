@@ -72,7 +72,7 @@ namespace roxi {
 
   String Error::get_origin_string()
   {
-    String temp = lofi::str_cstring("\t[File] %s\n\t[Line] %d");
+    String temp = lofi::str_cstring("\t[File] %s\n\t[Line] %d\n\t");
     String result = str_pushf(&arena, (char*)temp.str, file.str, line);
     return result;
   }

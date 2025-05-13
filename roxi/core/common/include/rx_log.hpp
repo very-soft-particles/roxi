@@ -46,29 +46,31 @@
 
   #define LOG(message, priority) PRINT("[:LOGGER::%llu::PRIORITY::%s] ::: [:TIME::%s] ::: \n%s\n", RX_THREAD_ID, get_priority_string(LogPriority::priority), Time::localtime_to_string(), message)
 
-  #define LOGF(priority, message, ...) PRINT("[:LOGGER::%llu::PRIORITY::%s] ::: [:TIME::%s] ::: \n%s\n", RX_THREAD_ID, get_priority_string(LogPriority::priority), Time::localtime_to_string(), message, __VA_ARGS__)
+  #define LOGF(priority, message, ...) PRINT("[:LOGGER::%llu::PRIORITY::%s] ::: [:TIME::%s] ::: \n\t", RX_THREAD_ID, get_priority_string(LogPriority::priority), Time::localtime_to_string());\
+    PRINT(message, __VA_ARGS__);\
+    PRINT_C('\n')
 
   #define LOG_ERROR(error,priority) LOG(error.what(), priority)
 
   #define DUMP_LOGS() (void)0
 
-  #define RX_TRACEF(message, ...) PRINT("[:LOGGER::%llu::PRIORITY::%s] ::: [:TIME::%s] ::: \n\t", RX_THREAD_ID, get_priority_string(LogPriority::Trace), Time::localtime_to_string());\
+  #define RX_TRACEF(message, ...) PRINT("[:LOGGER::%llu::PRIORITY::%s] ::: [:TIME::%s] ::: \n\t[File] %s\n\t[Line] %d\n\t[Message] ", RX_THREAD_ID, get_priority_string(LogPriority::Trace), Time::localtime_to_string(), __FILE__, __LINE__);\
     PRINT(message, __VA_ARGS__);\
     PRINT_C('\n')
 
-  #define RX_ERRORF(message, ...) PRINT("[:LOGGER::%llu::PRIORITY::%s] ::: [:TIME::%s] ::: \n\t", RX_THREAD_ID, get_priority_string(LogPriority::Error), Time::localtime_to_string());\
+  #define RX_ERRORF(message, ...) PRINT("[:LOGGER::%llu::PRIORITY::%s] ::: [:TIME::%s] ::: \n\t[File] %s\n\t[Line] %d\n\t[Message] ", RX_THREAD_ID, get_priority_string(LogPriority::Error), Time::localtime_to_string(), __FILE__, __LINE__);\
     PRINT(message, __VA_ARGS__);\
     PRINT_C('\n')
   
-  #define RX_FATALF(message, ...) PRINT("[:LOGGER::%llu::PRIORITY::%s] ::: [:TIME::%s] ::: \n\t", RX_THREAD_ID, get_priority_string(LogPriority::Fatal), Time::localtime_to_string());\
+  #define RX_FATALF(message, ...) PRINT("[:LOGGER::%llu::PRIORITY::%s] ::: [:TIME::%s] ::: \n\t[File] %s\n\t[Line] %d\n\t[Message] ", RX_THREAD_ID, get_priority_string(LogPriority::Fatal), Time::localtime_to_string(), __FILE__, __LINE__);\
     PRINT(message, __VA_ARGS__);\
     PRINT_C('\n')
 
-  #define RX_TRACE(message) PRINT("[:LOGGER::%llu::PRIORITY::%s] ::: [:TIME::%s] ::: \n\t%s\n", RX_THREAD_ID, get_priority_string(LogPriority::Trace), Time::localtime_to_string(), message)
+  #define RX_TRACE(message) PRINT("[:LOGGER::%llu::PRIORITY::%s] ::: [:TIME::%s] ::: \n\t[File] %s\n\t[Line] %d\n\t[Message] %s\n", RX_THREAD_ID, get_priority_string(LogPriority::Trace), Time::localtime_to_string(), __FILE__, __LINE__, message)
   
-  #define RX_ERROR(message) PRINT("[:LOGGER::%llu::PRIORITY::%s] ::: [:TIME::%s] ::: \n\t%s\n", RX_THREAD_ID, get_priority_string(LogPriority::Error), Time::localtime_to_string(), message)
+  #define RX_ERROR(message) PRINT("[:LOGGER::%llu::PRIORITY::%s] ::: [:TIME::%s] ::: \n\t[File] %s\n\t[Line] %d\n\t[Message] %s\n", RX_THREAD_ID, get_priority_string(LogPriority::Error), Time::localtime_to_string(), __FILE__, __LINE__, message)
   
-  #define RX_FATAL(message) PRINT("[:LOGGER::%llu::PRIORITY::%s] ::: [:TIME::%s] ::: \n\t%s\n", RX_THREAD_ID, get_priority_string(LogPriority::Fatal), Time::localtime_to_string(), message)
+  #define RX_FATAL(message) PRINT("[:LOGGER::%llu::PRIORITY::%s] ::: [:TIME::%s] ::: \n\t[File] %s\n\t[Line] %d\n\t[Message] %s\n", RX_THREAD_ID, get_priority_string(LogPriority::Fatal), Time::localtime_to_string(), __FILE__, __LINE__, message)
 
 #endif
 

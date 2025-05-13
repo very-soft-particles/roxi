@@ -7,10 +7,12 @@ build/**
 projects/**
 external/lua/**
 tags
+**/tags
 gmon.out
+**/gmon.out
 notes.txt
+**/notes.txt
 compile_commands.json
+**/compile_commands.json
 .cache/**
-cmake/**
-cmake
 .cache

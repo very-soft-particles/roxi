@@ -40,12 +40,17 @@
 #define RX_FIBER_KICK_MID_PRIORITY_JOB(job) GET_HOST_WORKER(ThreadPool)->kick_mid_priority_job(job)
 
 #define RX_FIBER_KICK_LOW_PRIORITY_JOB(job) GET_HOST_WORKER(ThreadPool)->kick_high_priority_job(job)
-
-#define RX_FIBER_WAIT(counter, wait_count) GET_HOST_WORKER(ThreadPool)->fiber_wait((counter), (wait_count))
-
 #define RX_FIBER_YIELD() GET_HOST_WORKER(ThreadPool)->yield()
 
 #define RX_SLEEP_FOR(nanoseconds) std::this_thread::sleep_for(std::chrono_literals::operator""ns((u64)(nanoseconds)));
+
+#if defined(RX_USE_VK_LOCK_FREE_MEMORY)
+#define RX_FIBER_WAIT(counter, wait_count) GET_HOST_WORKER(ThreadPool)->fiber_wait((counter), (wait_count))
+#else
+#define RX_FIBER_WAIT(counter, wait_count) while((counter)->get_count() < wait_count) RX_SLEEP_FOR(1000000)
+#endif
+
+
 
 namespace roxi {
 

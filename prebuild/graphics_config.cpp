@@ -16,6 +16,7 @@
 #include "../lofi/core/include/l_vocab.hpp"
 #include "../lofi/core/include/l_container.hpp"
 #include "../lofi/core/include/l_tuple.hpp"
+#include "../lofi/core/include/l_file.hpp"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -59,65 +60,64 @@ struct Obj {
 
 b8 write_cpp_file(Obj* objs, u32 num_objs, const char* file_path) {
   PRINT_LINE("entering write function");
-  FILE* file;
-  fopen_s(&file, file_path, "wb");
+  lofi::File file = lofi::File::create<lofi::FileType::WriteOnly>(file_path);
 
-  if(file == nullptr) {
+  if(!file.is_open()) {
     PRINT("failed to open file at path: %s\n", file_path);
     return false;
   }
   PRINT("successfully opened write file at path: %s\n", file_path);
   u64 vertices_start_index = 0;
   u64 indices_start_index = 0;
-  fprintf(file, "#pragma once\n");
-  fprintf(file, "#include \"rx_vocab.h\"\n");
-  fprintf(file, "\nnamespace roxi {");
-  fprintf(file, "\n\tnamespace graphics {");
-  fprintf(file, "\n\t\tnamespace resources {\n");
-  fprintf(file, "\n\t\t\tinline constexpr u32 num_objs = %u;\n", num_objs);
-  fprintf(file, "\n\t\t\tinline constexpr u32 obj_handles[] = {\n\t\t\t\t");
+  file << "#pragma once\n"
+  << "#include \"rx_vocab.h\"\n"
+  << "\nnamespace roxi {"
+  << "\n\tnamespace graphics {"
+  << "\n\t\tnamespace resources {\n"
+  << "\n\t\t\tinline constexpr u32 num_objs = " << num_objs << ';' << lofi::NewLine
+  << "\n\t\t\tinline constexpr u32 obj_handles[] = {\n\t\t\t\t";
   for(size_t i = 0; i < num_objs; i++) {
     if(i != 0) [[likely]] {
-      fprintf(file, ", ");
+      file << ", ";
       if(!(i & 7)) {
-        fprintf(file, "\n\t\t\t\t");
+        file << "\n\t\t\t\t";
       }
     }
-    fprintf(file, "%llu", vertices_start_index);
+    file << vertices_start_index;
     vertices_start_index += objs[i].vertices.get_size();
   }
-  fprintf(file, "\n\t\t\t};\n");
-  fprintf(file, "\n\t\t\tinline constexpr u64 total_num_vertices = %llu;\n", vertices_start_index);
-  fprintf(file, "\n\t\t\tinline constexpr u32 index_handles[] = {\n\t\t\t\t");
+  file << "\n\t\t\t};\n"
+  << "\n\t\t\tinline constexpr u64 total_num_vertices = " << vertices_start_index << ';' << lofi::NewLine
+  << "\n\t\t\tinline constexpr u32 index_handles[] = {\n\t\t\t\t";
   for(size_t i = 0; i < num_objs; i++) {
     if(i != 0) [[likely]] {
-      fprintf(file, ", ");
+      file << ", ";
       if(!(i & 7)) {
-        fprintf(file, "\n\t\t\t\t");
+        file << "\n\t\t\t\t";
       }
     }
-    fprintf(file, "%llu", indices_start_index);
+    file << indices_start_index;
     indices_start_index += objs[i].indices.get_size();
   }
-  fprintf(file, "\n\t\t\t};\n");
-  fprintf(file, "\n\t\t\tinline constexpr u64 total_num_indices = %llu;\n", indices_start_index);
-  fprintf(file, "inline constexpr u64 obj_sizes[] {\n\t\t\t\t");
+  file << "\n\t\t\t};\n"
+  << "\n\t\t\tinline constexpr u64 total_num_indices = " << indices_start_index << ';' << lofi::NewLine
+  << "inline constexpr u64 obj_sizes[] {\n\t\t\t\t";
   for(size_t i = 0; i < num_objs; i++) {
     if(i != 0) [[likely]] {
-      fprintf(file, ", ");
+      file << ", ";
       if(!(i & 7)) {
-        fprintf(file, "\n\t\t\t\t");
+        file << "\n\t\t\t\t";
       }
     }
-    fprintf(file, "%u", objs[i].vertices.get_size());
+    file << objs[i].vertices.get_size();
   }
-  fprintf(file, "\n\t\t\t};\n\n\t\t\t");
-  fprintf(file, "inline constexpr const char* obj_names[] {\n\t\t\t\t");
+  file << "\n\t\t\t};\n\n\t\t\t"
+  << "inline constexpr const char* obj_names[] {\n\t\t\t\t";
   for(size_t i = 0; i < num_objs; i++) {
     if(i != 0) [[likely]] {
-      fprintf(file, ", ");
+      file << ", ";
       if(!(i & 7)) {
-        fprintf(file, "\n\t\t\t\t");
+        file << "\n\t\t\t\t";
       }
     }
     lofi::String name = objs[i].name;
@@ -130,68 +130,66 @@ b8 write_cpp_file(Obj* objs, u32 num_objs, const char* file_path) {
       }
     }
     name.str = name.str + delim + 1;
-    fprintf(file, "{\"%s\"}", name.str);
+    file << "\"" << (char*)name.str << "\"";
   }
-  fprintf(file, "\n\t\t\t};\n\n\t\t\t");
-  fprintf(file, "inline constexpr float vertices[][8] {\n\t\t\t\t");
+  file << "\n\t\t\t};\n\n\t\t\t"
+  << "inline constexpr float vertices[][8] {\n\t\t\t\t";
   size_t accum = 0;
   for(size_t i = 0; i < num_objs; i++) {
     const size_t num_verts = objs[i].vertices.get_size();
     for(size_t j = 0; j < num_verts; j++) {
       if(accum != 0) [[likely]] {
-        fprintf(file, ", ");
+        file << ", ";
         if(!(accum & 7)) {
-          fprintf(file, "\n\t\t\t\t");
+          file << "\n\t\t\t\t";
         }
       }
-      fprintf(file, 
-          "{%f, %f, %f, %f, %f, %f, %f, %f}"
-          , objs[i].vertices[j].position.get<0>()
-          , objs[i].vertices[j].position.get<1>()
-          , objs[i].vertices[j].position.get<2>()
-          , objs[i].vertices[j].normal.get<0>()
-          , objs[i].vertices[j].normal.get<1>()
-          , objs[i].vertices[j].normal.get<2>()
-          , objs[i].vertices[j].texture_coord.get<0>()
-          , objs[i].vertices[j].texture_coord.get<1>());
+      file << "{ " << objs[i].vertices[j].position.get<0>() << ','
+      << objs[i].vertices[j].position.get<1>() << ','
+      << objs[i].vertices[j].position.get<2>() << ','
+      << objs[i].vertices[j].normal.get<0>() << ','
+      << objs[i].vertices[j].normal.get<1>() << ','
+      << objs[i].vertices[j].normal.get<2>() << ','
+      << objs[i].vertices[j].texture_coord.get<0>() << ','
+      << objs[i].vertices[j].texture_coord.get<1>() << '}';
       accum++;
     }
   }
-  fprintf(file, "\n\t\t\t};\n\n\t\t\t");
-  fprintf(file, "inline constexpr u32 indices[][3] {\n\t\t\t\t");
+  file << "\n\t\t\t};\n\n\t\t\t"
+  << "inline constexpr u32 indices[][3] {\n\t\t\t\t";
   accum = 0;
   for(size_t i = 0; i < num_objs; i++) {
     const size_t num_inds = objs[i].indices.get_size();
     for(size_t j = 0; j < num_inds; j++) {
       if(accum != 0) [[likely]] {
-        fprintf(file, ", ");
+        file << ", ";
         if(!(accum & 7)) {
-          fprintf(file, "\n\t\t\t\t");
+          file << "\n\t\t\t\t";
         }
       }
-      fprintf(file, 
-          "{%u, %u, %u}"
-          , objs[i].indices[j].vertex
-          , objs[i].indices[j].normal
-          , objs[i].indices[j].texture_coord);
+      file << '{' << objs[i].indices[j].vertex << ','
+      << objs[i].indices[j].normal << ','
+      << objs[i].indices[j].texture_coord << '}';
       accum++;
     }
   }
-  fprintf(file, "\n\t\t\t};\n\t\t}// -------- end of namespace resources ---------\n\t}// -------- end of namespace graphics ---------\n}// -------- end of namespace roxi ---------\n");
+  file << "\n\t\t\t};\n\t\t}// -------- end of namespace resources ---------\n\t}// -------- end of namespace graphics ---------\n}// -------- end of namespace roxi ---------\n";
   
-  fclose(file);
+  file.close();
   return true;
 }
 
 b8 parse_obj_file(Obj* obj, const char* file_path) {
-  FILE* file;
-  fopen_s(&file, file_path, "rb");
+  lofi::File file = lofi::File::create<lofi::FileType::ReadOnly>(file_path);
 
-  if(file == nullptr) {
+  PRINT_LINE("starting parse");
+
+  if(!file.is_open()) {
     PRINT("failed to find obj file at path: %s\n", file_path);
     return false;
   }
 
+  const u32 file_size = file.get_size();
 
   lofi::mem::ArrayContainerPolicy<Vec3<float>, KB(32), 8, lofi::mem::StackAllocPolicy> vertex_positions{};
   lofi::mem::ArrayContainerPolicy<Vec3<float>, KB(32), 8, lofi::mem::StackAllocPolicy> vertex_normals{};
@@ -203,11 +201,13 @@ b8 parse_obj_file(Obj* obj, const char* file_path) {
 
   lofi::mem::ArrayContainerPolicy<char, KB(4), 8, lofi::mem::StackAllocPolicy> line{};
   int c;
-  while((c = fgetc(file)) != EOF) {
+  u32 current_size = 0;
+  while((c = file.copy_one_at_current_offset()) != EOF && (current_size < file_size)) {
     //PRINT("%c", c);                                       // to see file print out
     if(c == '\n') {
       *(line.push(1)) = (char)c;
       const size_t line_length = line.get_size();
+      current_size += line_length;
       if(line[0] == '#' || line[0] == 'o') {
       }
       else if(line[0] == 's') {
@@ -229,32 +229,30 @@ b8 parse_obj_file(Obj* obj, const char* file_path) {
           }
           if(count == 0) {
             *(position_indices.push(1)) = strtoul(iter, &iter, 10);
-            continue;
           } else if(count == 1) {
             *(tex_coord_indices.push(1)) = strtoul(iter, &iter, 10);
-            continue;
           } else if(count == 2) {
             *(normal_indices.push(1)) = strtoul(iter, &iter, 10);
-            continue;
           }
         }
       }
       else if(line[0] == 'v' && line[1] == ' ') {
         Vec3<float>* pos = vertex_positions.push(1);
-        char* iter;
+        char* iter = &line[2];
         pos->get<0>() = strtof(&line[2], &iter);
         pos->get<1>() = strtof(iter + 1, &iter);
         pos->get<2>() = strtof(iter + 1, &iter);
+        //PRINT("vertex position = %f, %f, %f\n", pos->get<0>(), pos->get<1>(), pos->get<2>());
       }
       else if(line[0] == 'v' && line[1] == 't') {
         Vec2<float>* coord = texture_coords.push(1);
-        char* iter;
+        char* iter = &line[2];
         coord->get<0>() = strtof(&line[2], &iter);
         coord->get<1>() = strtof(iter + 1, &iter);
       }
       else if(line[0] == 'v' && line[1] == 'n') {
         Vec3<float>* norm = vertex_normals.push(1);
-        char* iter;
+        char* iter = &line[2];
         norm->get<0>() = strtof(&line[2], &iter);
         norm->get<1>() = strtof(iter + 1, &iter);
         norm->get<2>() = strtof(iter + 1, &iter);
@@ -283,7 +281,7 @@ b8 parse_obj_file(Obj* obj, const char* file_path) {
     indices[i].normal = normal_indices[i] - 1;
     indices[i].texture_coord = tex_coord_indices[i] - 1;
   }
-  fclose(file);
+  file.close();
   return true;
 }
 
@@ -295,6 +293,7 @@ int main(int argc, char** argv) {
   }
   for(size_t i = 1; i < argc - 1; i++) {
     Obj* obj = objs.push(1);
+    PRINT("obj file name: %s\n", argv[i]);
     if(!parse_obj_file(obj, argv[i])) {
       PRINT_LINE("[ERROR] : failed to parse obj");
       return EXIT_SUCCESS;

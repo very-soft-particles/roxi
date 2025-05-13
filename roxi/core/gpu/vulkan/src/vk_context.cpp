@@ -103,6 +103,7 @@ namespace roxi {
       RX_CHECK(context->_surface.init(&context->_instance, _wnd), "roxi::vk::ContextBuilder failed to build roxi::vk::Surface");
 
       _device_builder.set_surface(context->_surface.get_surface());
+      _device_builder.add_extension("VK_EXT_descriptor_buffer");
 
       RX_TRACE("building roxi::vk::Device");
       RX_CHECK(_device_builder.build(&context->_device)

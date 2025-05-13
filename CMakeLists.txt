@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.23)
+cmake_minimum_required(VERSION 3.31)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -6,15 +6,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # must set size of VOID_P in order for ninja to work, regular build sets automatically
 set(CMAKE_SIZEOF_VOID_P 8)
 
-project(roxi_0 VERSION 8)
+project(roxi_0)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/config/audio_config.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/config/graphics_config.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/config/ecs_config.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/config/shader_config.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/config/compile_shaders.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/config/compile_prebuilds.cmake")
 
-include("${CMAKE_CURRENT_LIST_DIR}/cmake/config/audio_config.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/cmake/config/graphics_config.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/cmake/config/ecs_config.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/cmake/config/shader_config.cmake")
-include("${CMAKE_CURRENT_LIST_DIR}/cmake/config/compile_shaders.cmake")
-
-set(CMAKE_TOOLCHAIN_FILE "C://vcpkg/vcpkg/scripts/buildsystems/vcpkg.cmake")
 
 set(LOFI_NO_TESTS)
 
@@ -95,15 +94,18 @@ set(HEAP_SIZE_FLAGS "--param gcc-min-expand=0")
 
 add_subdirectory(lofi)
 add_subdirectory(external)
-add_subdirectory(prebuild)
+#add_subdirectory(prebuild)
 
 #set(LUA_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/external/lua/include/")
 
+
+compile_prebuild_executables()
+
 #set these to OFF if you want to recompile the resource files
-#set(GRAPHICS_RESOURCES_UP_TO_DATE OFF CACHE BOOL "forcing graphics resources to update" FORCE)
-#set(AUDIO_RESOURCES_UP_TO_DATE OFF CACHE BOOL "forcing audio resources to update" FORCE)
-#set(ECS_RESOURCES_UP_TO_DATE OFF CACHE BOOL "forcing ecs resources to update" FORCE)
-#set(SHADER_RESOURCES_UP_TO_DATE OFF CACHE BOOL "forcing shader resources to update" FORCE)
+set(GRAPHICS_RESOURCES_UP_TO_DATE OFF CACHE BOOL "forcing graphics resources to update" FORCE)
+set(AUDIO_RESOURCES_UP_TO_DATE OFF CACHE BOOL "forcing audio resources to update" FORCE)
+set(ECS_RESOURCES_UP_TO_DATE OFF CACHE BOOL "forcing ecs resources to update" FORCE)
+set(SHADER_RESOURCES_UP_TO_DATE OFF CACHE BOOL "forcing shader resources to update" FORCE)
 
 update_audio_config()
 update_graphics_config()

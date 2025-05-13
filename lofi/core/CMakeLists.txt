@@ -1,9 +1,9 @@
 set(LOFI_INTERNAL_INCLUDE_PATH
-  "${CMAKE_CURRENT_LIST_DIR}/include/")
+  "${CMAKE_CURRENT_SOURCE_DIR}/include/")
 
 add_subdirectory(include)
 
-set(ECS_PATH "${LOFI_INTERNAL_INCLUDE_PATH}/ecs")
+set(ECS_PATH "${LOFI_INTERNAL_INCLUDE_PATH}ecs")
 
 set(LOFI_HEADERS
   "${LOFI_INTERNAL_INCLUDE_PATH}l_definition.hpp"

@@ -129,7 +129,6 @@ namespace roxi {
       VkImageView _image_view = VK_NULL_HANDLE;
       VkImageLayout _image_layout{};
       mem::Allocation _current_allocation{};
-      u32 _alignment = 0;
      
     public:
       b8 init
@@ -149,9 +148,6 @@ namespace roxi {
       const VkImage get_image() const;
       const VkImageView get_image_view() const;
       const VkImageLayout get_image_layout() const;
-      const u32 get_alignment() {
-        return _alignment;
-      }
       const gpu::ImageType get_image_type() {
         return _type;
       }

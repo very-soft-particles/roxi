@@ -47,19 +47,23 @@ namespace roxi {
       RX_TRACE("getting device layers to use");
       StringList layers = get_layers_to_use();
 
-      VkPhysicalDeviceBufferDeviceAddressFeatures device_address_features{};
-      device_address_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
-      device_address_features.bufferDeviceAddress = VK_TRUE;
+      VkPhysicalDeviceVulkan12Features vulkan_12_features{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
+      vulkan_12_features.timelineSemaphore = VK_TRUE;
+      vulkan_12_features.descriptorIndexing = VK_TRUE;
+      vulkan_12_features.bufferDeviceAddress = VK_TRUE;
 
-      VkPhysicalDeviceDescriptorIndexingFeatures indexing_features{};
+      VkPhysicalDeviceVulkan13Features vulkan_13_features{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+      vulkan_13_features.synchronization2 = VK_TRUE;
+      vulkan_13_features.pNext = &vulkan_12_features;
 
-      indexing_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
-      indexing_features.pNext = &device_address_features;
+      VkPhysicalDeviceDescriptorBufferFeaturesEXT descriptor_buffer_features{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT};
+      descriptor_buffer_features.descriptorBuffer = VK_TRUE;
+      descriptor_buffer_features.pNext = &vulkan_13_features;
 
       VkPhysicalDeviceFeatures2 features{};
 
       features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-      features.pNext = &indexing_features;
+      features.pNext = &descriptor_buffer_features;
 
 
       RX_TRACE("getting physical device features");
@@ -86,16 +90,15 @@ namespace roxi {
       RX_TRACE("getting device queue infos");
       Array<VkDeviceQueueCreateInfo> queue_infos = get_queue_create_infos();
 
-      const u32 p_next_count = _p_next_chain.get_size();
       create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-      create_info.pNext = _p_next_chain[0];
+      create_info.pNext = &descriptor_buffer_features;
       create_info.flags = 0;
 
       create_info.enabledExtensionCount = static_cast<u32>(extension_array.get_size());
       create_info.ppEnabledExtensionNames = (char**)(extension_array.get_buffer());
       create_info.enabledLayerCount = static_cast<u32>(layer_array.get_size());
       create_info.ppEnabledLayerNames = (char**)(layer_array.get_buffer());
-      create_info.pEnabledFeatures = &features.features;
+      create_info.pEnabledFeatures = &(features.features);
       create_info.pQueueCreateInfos = queue_infos.get_buffer();
       create_info.queueCreateInfoCount = queue_infos.get_size();
 

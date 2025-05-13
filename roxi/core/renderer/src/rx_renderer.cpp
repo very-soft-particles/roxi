@@ -16,8 +16,6 @@
 #include "rx_renderer.hpp"
 #include "rx_resource_manager.hpp"
 
-
-
 namespace roxi {
  
 //  const u32 ClusteredForwardRenderer::VerticesSize = sizeof(Vertex) * resource::vertex_count();

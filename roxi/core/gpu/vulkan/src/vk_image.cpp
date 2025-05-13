@@ -94,23 +94,24 @@ namespace roxi {
             , &image_mem_reqs
             , &mem_reqs);
 
-      _alignment = mem_reqs.memoryRequirements.alignment;
-
       return mem_reqs.memoryRequirements;
     }
 
     b8 Image::bind(mem::Allocation memory)
     {
-      const u32 offset = ALIGN_POW2(memory.offset, _alignment);
+      
+      RX_TRACEF("binding memory at location %llu, with offset %u, context at %llu", PTR2INT(memory.data), (u32)memory.offset, PTR2INT(_context));
       VK_CHECK(_context->get_device()
         .get_device_function_table()
         .vkBindImageMemory(
           _context->get_device().get_device()
           , _image
           , memory.data
-          , offset)
+          , memory.offset)
         , "failed to bind 2D image");
       _current_allocation = memory;
+
+      RX_TRACE("returning from bind image");
       return true;
     }
 
@@ -236,7 +237,7 @@ namespace roxi {
       view_create_info.pNext = nullptr;
       view_create_info.flags = 0;
       view_create_info.image = _image;
-      view_create_info.viewType = VK_IMAGE_VIEW_TYPE_3D;
+      view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
       view_create_info.format = get_image_format(_type);
       view_create_info.components = mapping;
       view_create_info.subresourceRange = view_range;

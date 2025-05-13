@@ -14,7 +14,10 @@
 //
 // =====================================================================================
 #pragma once
+#include "vk_descriptors.hpp"
 #include "vk_resource.hpp"
+
+#define VK_DESCRIPTOR_BUFFER_TYPE(X) X(Uniform) X(Storage) X(CombinedImageSampler) X(StorageImage) X(Max)
 
 namespace roxi {
   namespace vk {
@@ -26,13 +29,20 @@ namespace roxi {
     static constexpr u32 s_max_descriptors = KB(4);
 
     enum class DescriptorBufferType : u8 {
-      Uniform,
-      Storage,
-      CombinedImageSampler,
-      StorageImage,
-      Max
+#define ENUM(Type) Type,
+      VK_DESCRIPTOR_BUFFER_TYPE(ENUM)
+#undef ENUM
+ 
     };
 
+    static const char* get_descriptor_buffer_type_name(DescriptorBufferType type) {
+#define STR(TypeT) if (type == DescriptorBufferType::TypeT) return (const char*)STRINGIFY(TypeT);
+      VK_DESCRIPTOR_BUFFER_TYPE(STR)
+#undef STR
+        else
+          return "";
+    }
+ 
     VkBufferUsageFlags get_descriptor_buffer_usage_flags(DescriptorBufferType type);
 
     const VkDescriptorType get_descriptor_type(DescriptorBufferType type);
@@ -42,9 +52,10 @@ namespace roxi {
     struct DescriptorAllocation {
       VkDeviceSize size = 0;
       u32 offset = MAX_u32;
+      u32 id = MAX_u32;
 
       const u32 get_buffer_id() const {
-        return offset / size;
+        return id;
       }
 
       DescriptorAllocation operator+(const u32 rhs) {
@@ -57,10 +68,11 @@ namespace roxi {
       Buffer _descriptor_buffer;
       u64 _descriptor_counter = 0;
       VkDeviceSize _descriptor_size = 0;
-      VkDeviceSize _buffer_size = 0;
+      u32 _buffer_count = 0;
       DescriptorBufferType _type = DescriptorBufferType::Max;
     public:
-      b8 init(Context* context, const DescriptorBufferType type, const VkDeviceSize descriptor_size, const VkDeviceSize offset_alignment, const u32 count);
+      b8 init(Context* context, const DescriptorBufferType type);
+      b8 init(Context* context, const DescriptorBufferType type, const VkDeviceSize descriptor_size, const u32 buffer_size, const VkDeviceSize offset_alignment, const u32 count);
 
       const VkBufferUsageFlags get_usage_flags() const {
         return get_descriptor_buffer_usage_flags(_type);
@@ -89,7 +101,11 @@ namespace roxi {
       }
 
       const u64 get_buffer_byte_size() const {
-        return (u64)_buffer_size;
+        return (u64)_descriptor_buffer.get_size();
+      }
+
+      const u64 get_max_descriptor_count() const {
+        return _buffer_count;
       }
 
       b8 terminate();
@@ -160,33 +176,12 @@ namespace roxi {
       DescriptorBufferArena _descriptor_arenas[4];
       u32 _descriptor_offset_alignment{};
 
-      static constexpr u32 UniformArenaIndex = 0;
-      static constexpr u32 StorageArenaIndex = 1;
-      static constexpr u32 TextureArenaIndex = 2;
-      static constexpr u32 ImageArenaIndex   = 3;
-
-      template<DescriptorBufferType Type>
-      static constexpr u32 get_arena_index() {
-        if constexpr (Type == DescriptorBufferType::Uniform) {
-          return UniformArenaIndex;
-        } else if constexpr (Type == DescriptorBufferType::Storage) {
-          return StorageArenaIndex;
-        } else if constexpr (Type == DescriptorBufferType::CombinedImageSampler) {
-          return TextureArenaIndex;
-        } else if constexpr (Type == DescriptorBufferType::StorageImage) {
-          return ImageArenaIndex;
-        }
-        return MAX_u32;
+      const DescriptorBufferArena& obtain_arena(DescriptorBufferType type) const {
+        return _descriptor_arenas[(u8)type];
       }
 
-      template<DescriptorBufferType Type>
-      const DescriptorBufferArena& obtain_arena() const {
-        return _descriptor_arenas[get_arena_index<Type>()];
-      }
-
-      template<DescriptorBufferType Type>
-      DescriptorBufferArena& obtain_arena() {
-        return _descriptor_arenas[get_arena_index<Type>()];
+      DescriptorBufferArena& obtain_arena(DescriptorBufferType type) {
+        return _descriptor_arenas[(u8)type];
       }
 
       const u32 get_offset_alignment() const;
@@ -194,23 +189,22 @@ namespace roxi {
     public:
       using DescriptorBufferHandle = u32;
 
-      b8 init(Context* context, const u32 uniform_buffer_count, const u32 storage_buffer_count, const u32 texture_count, const u32 storage_image_count);
+      b8 init(Context* context, const u32 uniform_buffer_count, const u32 uniform_layout_size, const u32 storage_buffer_count, const u32 storage_layout_size, const u32 texture_count, const u32 texture_layout_size, const u32 storage_image_count, const u32 image_layout_size);
 
       const b8 get_descriptor(const vk::Buffer& buffer, const gpu::BufferType type, const vk::DescriptorAllocation allocation, void* dst);
 
-      template<vk::DescriptorBufferType Type>
-      const vk::DescriptorAllocation allocate(const u32 count) {
-        return obtain_arena<Type>().allocate(_context, count, get_offset_alignment());
+      const b8 get_descriptor(const vk::Image& image, const gpu::ImageType type, VkSampler sampler, const vk::DescriptorAllocation allocation, void* dst);
+
+      const vk::DescriptorAllocation allocate(const DescriptorBufferType type, const u32 count) {
+        return obtain_arena(type).allocate(_context, count, get_offset_alignment());
       }
 
-      template<vk::DescriptorBufferType Type>
-      const vk::Buffer& get_descriptor_buffer() const {
-        return obtain_arena<Type>().get_descriptor_buffer();
+      const vk::Buffer& get_descriptor_buffer(const DescriptorBufferType type) const {
+        return obtain_arena(type).get_descriptor_buffer();
       }
 
-      template<vk::DescriptorBufferType Type>
-      vk::Buffer& get_descriptor_buffer() {
-        return obtain_arena<Type>().get_descriptor_buffer();
+      vk::Buffer& get_descriptor_buffer(const DescriptorBufferType type) {
+        return obtain_arena(type).get_descriptor_buffer();
       }
 
 

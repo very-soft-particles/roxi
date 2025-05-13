@@ -151,7 +151,7 @@ namespace roxi {
       return false;
     }
 
-    vk::QueueType queue_type = vk::QueueType::Render;
+    vk::QueueType queue_type = vk::QueueType::Generic;
 
     RX_TRACE("initializing gpu device");
     if(!_gpu_device.init((void*)&_window, 1, &queue_type)) {
@@ -226,94 +226,110 @@ namespace roxi {
   }
 
   b8 Application::update_sequence() {
-    ThreadPool::job_node_t node{};
-    Job update_job;
+//    ThreadPool::job_node_t node{};
+//    Job update_job;
     Counter counter;
-
+//
     const u64 system_count = _systems.get_size();
-    update_job.set_table(
-        { update_base_job
-        , job_success_increment
-        , job_failed_minimal
-        , _current_front_frame
-        , system_count
-        , &counter
-        });
-    update_job.set_obj(_systems.get_buffer());
-
-    node.clear();
-    node.data = update_job;
+//    update_job.set_table(
+//        { update_base_job
+//        , job_success_increment
+//        , job_failed_minimal
+//        , _current_front_frame
+//        , system_count
+//        , &counter
+//        });
+//    update_job.set_obj(_systems.get_buffer());
+//
+//    node.clear();
+//    node.data = update_job;
 
     RX_TRACE("entering main loop");
     b8 br = false;
     b8 loop = true;
     const auto start_time = Time::now();
     do {
-      RX_THREAD_POOL->push_high_priority_job(0, &node);
-      while((loop = win::PROCESS()) && counter.get_count() < 1) 
-      {
-        //using namespace std::chrono_literals;
-        //std::this_thread::sleep_for(10ms);
-        if(!RX_RUN_REACTOR()) {
-          RX_FATAL("reactor kernel returned false in update loop");
+      for(u32 i = 0; i < system_count; i++) {
+        if(!_systems[i]->get_update_job(&counter, 0, 1).run()) {
+          RX_ERRORF("system %u failed to update", i);
           br = true;
-          break;
         }
       }
       if(br) {
         break;
       }
-      handle_input(_current_front_frame);
-      _current_front_frame++;
-      while((loop = win::PROCESS()) && (_current_front_frame * RX_FRAME_TIME) + start_time < Time::now()) {
-      }
-      _frame_manager.reset_frame(_current_front_frame);
-      counter.reset();
-      node.clear();
-      node.data.set_job_start(_current_front_frame - 1);
-      node.data.set_job_end(_current_front_frame);
-    } while(loop);
-    _frame_manager.reset_frame(_current_front_frame);
+    }
+    while((loop = win::PROCESS()) && counter.get_count() < 1);
+//      {
+//        //using namespace std::chrono_literals;
+//        //std::this_thread::sleep_for(10ms);
+//        if(!RX_RUN_REACTOR()) {
+//          RX_FATAL("reactor kernel returned false in update loop");
+//          br = true;
+//          break;
+//        }
+//      }
+//      if(br) {
+//        break;
+//      }
+//      handle_input(_current_front_frame);
+//      _current_front_frame++;
+//      while((loop = win::PROCESS()) && (_current_front_frame * RX_FRAME_TIME) + start_time < Time::now()) {
+//      }
+//      _frame_manager.reset_frame(_current_front_frame);
+//      counter.reset();
+//      node.clear();
+//      node.data.set_job_start(_current_front_frame - 1);
+//      node.data.set_job_end(_current_front_frame);
+//    } while(loop);
+//    _frame_manager.reset_frame(_current_front_frame);
     return !br;
   }
 
   b8 Application::terminate_sequence() {
-    ThreadPool::job_node_t node{};
-    Job term_job;
+    //ThreadPool::job_node_t node{};
+    //Job term_job;
     Counter counter{0};
 
     const u64 system_count = _systems.get_size();
-    term_job.set_table(
-        { terminate_base_job
-        , job_success_increment
-        , job_failed_minimal
-        , _current_front_frame
-        , system_count
-        , &counter
-        });
-    term_job.set_obj(_systems.get_buffer());
-    node.data = term_job;
-    node.data.set_job_counter(&counter);
-    node.data.set_job_start(0);
-    node.data.set_job_end(1);
-    RX_THREAD_POOL->push_high_priority_job(0, &node);
-    {
-      const u8 count_down = 8;
-      u8 current = 0;
-      while(counter.get_count() < 1) {
-        if(!RX_THREAD_POOL->reactor_kernel()) {
-          RX_ERROR("reactor returned false in terminate sequence");
-          RX_THREAD_POOL->terminate();
-          return false;
-        }
-        current++;
-        if(current == count_down) {
-          using namespace std::chrono_literals;
-          std::this_thread::sleep_for(5ms);
-          current = 0;
-        }
-      }
+    //term_job.set_table(
+    //    { terminate_base_job
+    //    , job_success_increment
+    //    , job_failed_minimal
+    //    , _current_front_frame
+    //    , system_count
+    //    , &counter
+    //    });
+    //term_job.set_obj(_systems.get_buffer());
+    //node.data = term_job;
+    //node.data.set_job_counter(&counter);
+    //node.data.set_job_start(0);
+    //node.data.set_job_end(1);
+    //RX_THREAD_POOL->push_high_priority_job(0, &node);
+    //{
+    //  const u8 count_down = 8;
+    //  u8 current = 0;
+    //  while(counter.get_count() < 1) {
+    //    if(!RX_THREAD_POOL->reactor_kernel()) {
+    //      RX_ERROR("reactor returned false in terminate sequence");
+    //      RX_THREAD_POOL->terminate();
+    //      return false;
+    //    }
+    //    current++;
+    //    if(current == count_down) {
+    //      using namespace std::chrono_literals;
+    //      std::this_thread::sleep_for(5ms);
+    //      current = 0;
+    //    }
+    //  }
+    //}
+
+    for(u32 i = 0; i < system_count; i++) {
+      RX_CHECKF(_systems[i]->get_terminate_job(&counter, 0, 1)
+          , "failed to terminate system %u"
+          , i);
     }
+
     RX_THREAD_POOL->terminate();
     return true;
   }
@@ -327,7 +343,7 @@ namespace roxi {
     RX_TRACE("attempting update sequence");
     if(!update_sequence()) {
       RX_FATAL("update sequence failed, halting application");
-      RX_THREAD_POOL->terminate();
+      //RX_THREAD_POOL->terminate();
       return 0;
     }
     RX_TRACE("attempting terminate sequence");

@@ -52,7 +52,6 @@ namespace roxi {
 
         const gpu::BufferType buffer_type = convert_to_buffer_type(type);
 
-        const VkBufferUsageFlags flags = get_buffer_usage_flags(buffer_type);
         if(!buffer_begin[i].init(_context, buffer_infos[i].buffer.size, buffer_type)) {
           RX_ERROR("failed to init buffer in ResourcePool::init");
           return false;
@@ -68,7 +67,7 @@ namespace roxi {
               , &buffer_mem_reqs_info
               , &buffer_memory_reqs[i]);
 
-        _buffer_arena_ids[(u32)buffer_type] = memory_builder.register_bucket(buffer_memory_reqs[i].memoryRequirements, get_memory_type_flags(convert_to_buffer_type(buffer_infos[i].type)));
+        _buffer_arena_ids[(u32)buffer_type] = memory_builder.register_bucket(buffer_memory_reqs[i].memoryRequirements, get_memory_type_flags(convert_to_buffer_type(buffer_infos[i].type)), get_aux_memory_flags(convert_to_buffer_type(buffer_infos[i].type)));
       }
 
       StackArray<VkMemoryRequirements2> image_memory_reqs;
@@ -115,6 +114,7 @@ namespace roxi {
         Image& image = obtain_image(i);
         mem::Allocation allocation = _memory_pool.allocate(get_image_arena_id(image.get_image_type()), image_memory_reqs[i].memoryRequirements.size, image_memory_reqs[i].memoryRequirements.alignment);
         image.bind(allocation);
+        image.construct_image_view();
       }
       return true;
     }

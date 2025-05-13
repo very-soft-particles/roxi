@@ -4,17 +4,17 @@ namespace roxi {
 	namespace config {
 		namespace shaders {
 			inline constexpr u64 TotalNumShaders = 21;
-			inline constexpr const char* shader_names[] = { "C:/roxi/roxi_0.8/roxi/core/resource/spirv/aabb_generator.comp.spv", "C:/roxi/roxi_0.8/roxi/core/resource/spirv/aabb_render.frag.spv", "C:/roxi/roxi_0.8/roxi/core/resource/spirv/aabb_render.vert.spv", "C:/roxi/roxi_0.8/roxi/core/resource/spirv/basic_shader.frag.spv", 
-				"C:/roxi/roxi_0.8/roxi/core/resource/spirv/basic_shader.vert.spv", "C:/roxi/roxi_0.8/roxi/core/resource/spirv/build_skybox.frag.spv", "C:/roxi/roxi_0.8/roxi/core/resource/spirv/frustum_culling.comp.spv", "C:/roxi/roxi_0.8/roxi/core/resource/spirv/frustum_draw_indirect.comp.spv", 
-				"C:/roxi/roxi_0.8/roxi/core/resource/spirv/fullscreen_triangle.vert.spv", "C:/roxi/roxi_0.8/roxi/core/resource/spirv/generate_partition.comp.spv", "C:/roxi/roxi_0.8/roxi/core/resource/spirv/light_culling.comp.spv", "C:/roxi/roxi_0.8/roxi/core/resource/spirv/light_culling_batch.comp.spv", 
-				"C:/roxi/roxi_0.8/roxi/core/resource/spirv/light_orb.frag.spv", "C:/roxi/roxi_0.8/roxi/core/resource/spirv/light_orb.vert.spv", "C:/roxi/roxi_0.8/roxi/core/resource/spirv/line.frag.spv", "C:/roxi/roxi_0.8/roxi/core/resource/spirv/line.vert.spv", 
-				"C:/roxi/roxi_0.8/roxi/core/resource/spirv/scene.frag.spv", "C:/roxi/roxi_0.8/roxi/core/resource/spirv/scene.vert.spv", "C:/roxi/roxi_0.8/roxi/core/resource/spirv/skybox.frag.spv", "C:/roxi/roxi_0.8/roxi/core/resource/spirv/skybox.vert.spv", 
-				"C:/roxi/roxi_0.8/roxi/core/resource/spirv/tonemap.frag.spv"
+			inline constexpr const char* shader_names[] = { "C:/roxi/roxi/core/resource/spirv/aabb_generator.comp.spv", "C:/roxi/roxi/core/resource/spirv/aabb_render.frag.spv", "C:/roxi/roxi/core/resource/spirv/aabb_render.vert.spv", "C:/roxi/roxi/core/resource/spirv/basic_shader.frag.spv", 
+				"C:/roxi/roxi/core/resource/spirv/basic_shader.vert.spv", "C:/roxi/roxi/core/resource/spirv/build_skybox.frag.spv", "C:/roxi/roxi/core/resource/spirv/frustum_culling.comp.spv", "C:/roxi/roxi/core/resource/spirv/frustum_draw_indirect.comp.spv", 
+				"C:/roxi/roxi/core/resource/spirv/fullscreen_triangle.vert.spv", "C:/roxi/roxi/core/resource/spirv/generate_partition.comp.spv", "C:/roxi/roxi/core/resource/spirv/light_culling.comp.spv", "C:/roxi/roxi/core/resource/spirv/light_culling_batch.comp.spv", 
+				"C:/roxi/roxi/core/resource/spirv/light_orb.frag.spv", "C:/roxi/roxi/core/resource/spirv/light_orb.vert.spv", "C:/roxi/roxi/core/resource/spirv/line.frag.spv", "C:/roxi/roxi/core/resource/spirv/line.vert.spv", 
+				"C:/roxi/roxi/core/resource/spirv/scene.frag.spv", "C:/roxi/roxi/core/resource/spirv/scene.vert.spv", "C:/roxi/roxi/core/resource/spirv/skybox.frag.spv", "C:/roxi/roxi/core/resource/spirv/skybox.vert.spv", 
+				"C:/roxi/roxi/core/resource/spirv/tonemap.frag.spv"
 
 			};
 
 			inline constexpr u64 shader_descriptor_set_counts[] = {
-        1, 0, 0, 0, 
+1, 0, 0, 0, 
 				4, 0, 1, 2, 
 				0, 2, 1, 1, 
 				0, 1, 0, 1, 

@@ -176,6 +176,8 @@ namespace roxi {
     }
 
     static void wait_on_fence(Context* context, Fence* fence, Counter* counter) {
+      RX_TRACE("waiting on vulkan fence");
+#if defined(RX_USE_VK_LOCK_FREE_MEMORY)
       Job job{};
       job
         .set_entry_point(wait_job_func)
@@ -185,10 +187,11 @@ namespace roxi {
         .set_job_start(PTR2INT((void*)fence))
         .set_job_end(PTR2INT((void*)counter));
       RX_FIBER_KICK_LOW_PRIORITY_JOB(job);
-
-      RX_TRACE("waiting on vulkan fence");
       RX_FIBER_WAIT(counter, 1);
-
+#else
+      context->get_device().get_device_function_table().vkWaitForFences(context->get_device().get_device()
+          , 1, &(fence->get_fence()), VK_TRUE, 1000000);
+#endif
       RX_TRACE("returning from waiting fiber");
     }
 

@@ -15,6 +15,7 @@
 // =====================================================================================
 #pragma once
 #include "vk_allocator.hpp"
+#include <vulkan/vulkan_core.h>
 
 #define VK_BUFFER_TYPES(X) X(HostUniformBuffer) X(DeviceUniformBuffer) X(HostStorageBuffer) X(DeviceStorageBuffer) X(StagingBuffer) X(IndirectCommand) X(TransferSource) X(DescriptorBuffer)
 
@@ -40,13 +41,13 @@ namespace roxi {
 
     static VkBufferUsageFlags get_buffer_usage_flags(const gpu::BufferType type) {
       static const VkBufferUsageFlags _s_flags[] = 
-        { VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
-        , VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
-        , VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
-        , VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
+        { VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
+        , VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
+        , VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
+        , VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
         , VK_BUFFER_USAGE_TRANSFER_SRC_BIT
         , VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT
-        , VK_BUFFER_USAGE_TRANSFER_DST_BIT
+        , VK_BUFFER_USAGE_TRANSFER_SRC_BIT |VK_BUFFER_USAGE_TRANSFER_DST_BIT
         };
       return _s_flags[(u8)type];
     }
@@ -62,7 +63,6 @@ namespace roxi {
       VkDeviceSize _buffer_size = 0;
       gpu::BufferType _type;
       mem::Allocation _current_allocation{};
-      u32 _alignment = 0;
     public:
       Context* _context = nullptr;
       b8 init
@@ -79,9 +79,6 @@ namespace roxi {
       VkDeviceAddress get_device_address() const;
       const VkMemoryRequirements get_memory_requirements();
       b8 terminate();
-      const u32 get_alignment() {
-        return _alignment;
-      }
       VkBuffer get_buffer() const;
       VkDeviceSize get_size() const;
       const gpu::BufferType get_buffer_type();

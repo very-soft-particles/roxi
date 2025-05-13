@@ -260,6 +260,7 @@ namespace roxi {
               && ((allocate_flags & current_descriptor.allocate_flags) == allocate_flags)) {
             if((new_block_size + current_descriptor.size) 
                 < memory_properties.memoryProperties.memoryHeaps[memory_properties.memoryProperties.memoryTypes[type_index].heapIndex].size) {
+              
               RX_TRACE("found memory type, enlarging allocation size");
               current_descriptor.size += new_block_size;
               return (u32)i;

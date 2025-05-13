@@ -28,7 +28,7 @@ namespace roxi {
       , VkBufferUsageFlags flags
       ) 
     {
-      RX_TRACEF("initializing buffer with context at %llu", PTR2INT(context));
+      RX_TRACEF("initializing buffer type %s with context at %llu", gpu::get_vk_buffer_type_name(type), PTR2INT(context));
       _context = context;
       _buffer_size = size;
       _type = type;
@@ -130,9 +130,7 @@ namespace roxi {
 
     b8 Buffer::bind(mem::Allocation memory) {
 
-      const u32 offset = ALIGN_POW2(memory.offset, _alignment);
-
-      RX_TRACEF("binding memory at location %llu, with offset %u and alignment %u, context at %llu", PTR2INT(memory.data), offset, _alignment, PTR2INT(_context));
+      RX_TRACEF("binding memory at location %llu, with offset %u, context at %llu", PTR2INT(memory.data), (u32)memory.offset, PTR2INT(_context));
 
 
       VK_CHECK(_context->get_device()
@@ -141,7 +139,7 @@ namespace roxi {
           _context->get_device().get_device()
           , _buffer
           , memory.data
-          , offset)
+          , memory.offset)
         , "failed to bind buffer");
       _current_allocation = memory;
 
@@ -158,8 +156,6 @@ namespace roxi {
         .vkGetBufferMemoryRequirements2(_context->get_device().get_device()
             , &buffer_mem_reqs
             , &mem_reqs);
-
-      _alignment = mem_reqs.memoryRequirements.alignment;
 
       return mem_reqs.memoryRequirements;
     }

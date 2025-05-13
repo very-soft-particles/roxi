@@ -120,18 +120,21 @@ namespace roxi {
         begin_info.clearValueCount = 1;
         begin_info.pClearValues = &clear_value;
         begin_info.framebuffer = framebuffer.get_framebuffer();
+        RX_TRACE("vkCmdBeginRenderPass");
         _context->get_device().get_device_function_table()
           .vkCmdBeginRenderPass(_buffer, &begin_info, subpass_contents);
         return *this;
       }
 
       CommandBuffer& next_subpass(VkSubpassContents subpass_contents = VK_SUBPASS_CONTENTS_INLINE) {
+        RX_TRACE("vkCmdNextSubpass");
         _context->get_device().get_device_function_table()
           .vkCmdNextSubpass(_buffer, subpass_contents);
         return *this;
       }
 
       CommandBuffer& end_render_pass() {
+        RX_TRACE("vkCmdEndRenderPass");
         _context->get_device().get_device_function_table()
           .vkCmdEndRenderPass(_buffer);
         return *this;
@@ -147,6 +150,7 @@ namespace roxi {
           begin_info.flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
         }
         begin_info.pInheritanceInfo = inheritance_info;
+        RX_TRACE("vkBeginCommandBuffer");
         VK_ASSERT(_context->get_device().get_device_function_table()
           .vkBeginCommandBuffer(_buffer, &begin_info), "failed to begin command buffer");
         return *this;
@@ -156,7 +160,9 @@ namespace roxi {
         if(_current_pipeline == &pipeline) {
           return *this;
         }
+        RX_TRACE("setting VkPipeline");
         _current_pipeline = &(Pipeline&)pipeline;
+        RX_TRACE("vkCmdBindPipeline");
         _context->get_device().get_device_function_table()
           .vkCmdBindPipeline(_buffer, pipeline.get_pipeline_bind_point(), pipeline.get_pipeline());
         return *this;
@@ -166,45 +172,54 @@ namespace roxi {
         if(_current_pool == &pool) {
           return *this;
         }
+        RX_TRACE("setting descriptor pool");
         _current_pool = &(DescriptorPool&)pool;
-        const u32 buffer_count = 4;
+        const u32 max_buffer_count = 4;
         VkDescriptorBufferBindingInfoEXT binding_infos[4];
 
-        u32 indices[] = {0, 1, 2, 3};
+        u32 indices[4];
         VkDeviceSize offsets[] = {0, 0, 0, 0};
 
-        binding_infos[0].address = pool.obtain_arena<DescriptorBufferType::Uniform>().get_descriptor_buffer().get_device_address();
-        binding_infos[0].usage   = pool.obtain_arena<DescriptorBufferType::Uniform>().get_usage_flags();
-
-        binding_infos[1].address = pool.obtain_arena<DescriptorBufferType::Storage>().get_descriptor_buffer().get_device_address();
-        binding_infos[1].usage   = pool.obtain_arena<DescriptorBufferType::Storage>().get_usage_flags();
-
-        binding_infos[2].address = pool.obtain_arena<DescriptorBufferType::CombinedImageSampler>().get_descriptor_buffer().get_device_address();
-        binding_infos[2].usage   = pool.obtain_arena<DescriptorBufferType::CombinedImageSampler>().get_usage_flags();
-
-        binding_infos[3].address = pool.obtain_arena<DescriptorBufferType::StorageImage>().get_descriptor_buffer().get_device_address();
-        binding_infos[3].usage   = pool.obtain_arena<DescriptorBufferType::StorageImage>().get_usage_flags();
-
-        for(u32 i = 0; i < buffer_count; i++) {
-          binding_infos[i].sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT;
-          binding_infos[i].pNext = nullptr;
-          // offset is zero for each buffer
+        RX_TRACE("getting descriptor pool arenas values");
+        u32 buffer_count = 0;
+        for(u32 i = 0; i < max_buffer_count; i++) {
+          if(pool.obtain_arena(DescriptorBufferType(i)).get_max_descriptor_count() > 0) {
+            RX_TRACEF("descriptor buffer type %s at index %u has offset %u", get_descriptor_buffer_type_name(DescriptorBufferType(i)), buffer_count, (u32)offsets[buffer_count]);
+            indices[i] = buffer_count;
+            binding_infos[buffer_count].sType = VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT;
+            binding_infos[buffer_count].pNext = nullptr;
+            binding_infos[buffer_count].address = pool.obtain_arena(DescriptorBufferType(i)).get_descriptor_buffer().get_device_address();
+            binding_infos[buffer_count++].usage   = pool.obtain_arena(DescriptorBufferType(i)).get_usage_flags();
+          }
         }
+
+        RX_TRACE("vkCmdBindDescriptorBuffersEXT");
         _context->get_device().get_device_function_table()
           .vkCmdBindDescriptorBuffersEXT(_buffer, buffer_count, binding_infos);
 
-        _context->get_device().get_device_function_table()
-          .vkCmdSetDescriptorBufferOffsetsEXT(_buffer, _current_pipeline->get_pipeline_bind_point(), _current_pipeline->get_pipeline_layout(), 0, buffer_count, indices, offsets);
+        RX_TRACE("vkCmdSetDescriptorBufferOffsetsEXT");
+        buffer_count = 0;
+        for(u32 i = 0; i < max_buffer_count; i++) {
+          if(pool.obtain_arena(DescriptorBufferType(i)).get_max_descriptor_count() > 0) {
+            RX_TRACEF("setting descriptor offset at index = %u, with offset = %u", buffer_count, *(u32*)(offsets + buffer_count)); 
+            _context->get_device().get_device_function_table()
+              .vkCmdSetDescriptorBufferOffsetsEXT(_buffer, _current_pipeline->get_pipeline_bind_point(), _current_pipeline->get_pipeline_layout(), buffer_count, 1, indices + buffer_count, offsets + buffer_count);
+            buffer_count++;
+          }
+        }
+
         return *this;
       }
 
       CommandBuffer& bind_meshes(VkBuffer* vertex_buffers, VkDeviceSize* offsets, u32 count) {
+        RX_TRACE("vkCmdBindVertexBuffers");
         _context->get_device().get_device_function_table()
           .vkCmdBindVertexBuffers(_buffer, 0, count, vertex_buffers, offsets);
         return *this;
       }
 
       CommandBuffer& bind_indices(VkBuffer index_buffer, VkDeviceSize size) {
+        RX_TRACE("vkCmdBindIndexBuffer");
         _context->get_device().get_device_function_table()
           .vkCmdBindIndexBuffer(_buffer, index_buffer, size, VK_INDEX_TYPE_UINT32);
         return *this;
@@ -221,24 +236,28 @@ namespace roxi {
         dependency_info.pBufferMemoryBarriers = buffer_barriers;
         dependency_info.pImageMemoryBarriers = image_barriers;
         dependency_info.pMemoryBarriers = memory_barriers;
+        RX_TRACE("vkCmdPipelineBarrier2");
         _context->get_device().get_device_function_table()
           .vkCmdPipelineBarrier2(_buffer, &dependency_info);
         return *this;
       }
 
       CommandBuffer& record_copy_buffer(const Buffer& src, const Buffer& dst, u32 region_count, VkBufferCopy* region_infos) {
+        RX_TRACE("vkCmdCopyBuffer");
         _context->get_device().get_device_function_table()
           .vkCmdCopyBuffer(_buffer, src.get_buffer(), dst.get_buffer(), region_count, region_infos);
         return *this;
       }
 
       CommandBuffer& record_copy_image(const Image& src, const Image&& dst, u32 region_count, VkImageCopy* region_infos) {
+        RX_TRACE("vkCmdCopyImage");
         _context->get_device().get_device_function_table()
           .vkCmdCopyImage(_buffer, src.get_image(), src.get_image_layout(), dst.get_image(), dst.get_image_layout(), region_count, region_infos);
         return *this;
       }
 
       CommandBuffer& record_copy_image_to_buffer(const Image& src, const Buffer& dst, u32 region_count, VkBufferImageCopy* region_infos) {
+        RX_TRACE("vkCmdCopyImageToBuffer");
         _context->get_device().get_device_function_table()
           .vkCmdCopyImageToBuffer(_buffer, src.get_image(), src.get_image_layout(), dst.get_buffer(), region_count, region_infos);
         return *this;
@@ -246,54 +265,64 @@ namespace roxi {
 
 
       CommandBuffer& record_copy_buffer_to_image(const Buffer& src, const Image& dst, u32 region_count, VkBufferImageCopy* region_infos) {
+        RX_TRACE("vkCmdCopyBufferToImage");
         _context->get_device().get_device_function_table()
           .vkCmdCopyBufferToImage(_buffer, src.get_buffer(), dst.get_image(), dst.get_image_layout(), region_count, region_infos);
         return *this;
       }
 
       CommandBuffer& record_draw(u32 vertex_count, u32 instance_count, u32 first_vertex = 0, u32 first_instance = 0) {
+
+        RX_TRACE("vkCmdDraw");
         _context->get_device().get_device_function_table()
           .vkCmdDraw(_buffer, vertex_count, instance_count, first_vertex, first_instance);
         return *this;
       }
 
       CommandBuffer& record_indexed_draw(u32 index_count, u32 instance_count, u32 vertex_offset, u32 first_index = 0, u32 first_instance = 0) {
+        RX_TRACE("vkCmdDrawIndexed");
         _context->get_device().get_device_function_table()
           .vkCmdDrawIndexed(_buffer, index_count, instance_count, first_index, vertex_offset, first_instance);
         return *this;
       }
 
       CommandBuffer& record_indirect_draw(Buffer* const indirect_buffer, VkDeviceSize offset, u32 count, u32 stride) {
+        RX_TRACE("vkCmdDrawIndirect");
         _context->get_device().get_device_function_table()
           .vkCmdDrawIndirect(_buffer, indirect_buffer->get_buffer(), offset, count, stride);
         return *this;
       }
 
       CommandBuffer& record_indexed_indirect_draw(Buffer* const indirect_buffer, VkDeviceSize offset, u32 count, u32 stride) {
+        RX_TRACE("vkCmdDrawIndexedIndirect");
         _context->get_device().get_device_function_table()
           .vkCmdDrawIndexedIndirect(_buffer, indirect_buffer->get_buffer(), offset, count, stride);
         return *this;
       }
 
       CommandBuffer& record_dispatch(u32 group_count_x, u32 group_count_y, u32 group_count_z) {
+        RX_TRACE("vkCmdDispatch");
         _context->get_device().get_device_function_table()
           .vkCmdDispatch(_buffer, group_count_x, group_count_y, group_count_z);
         return *this;
       }
 
       CommandBuffer& record_dispatch_indirect(Buffer* const indirect_buffer, const VkDeviceSize offset) {
+        RX_TRACE("vkCmdDispatchIndirect");
         _context->get_device().get_device_function_table()
           .vkCmdDispatchIndirect(_buffer, indirect_buffer->get_buffer(), offset);
         return *this;
       }
 
       CommandBuffer& record_execute_commands(u32 num_commands, VkCommandBuffer* _buffers) {
+        RX_TRACE("vkCmdExecuteCommands");
         _context->get_device().get_device_function_table()
           .vkCmdExecuteCommands(_buffer, num_commands, _buffers);
         return *this;
       }
 
       CommandBuffer& end() {
+        RX_TRACE("vkEndCommandBuffer");
         VK_ASSERT(_context->get_device().get_device_function_table()
           .vkEndCommandBuffer(_buffer), "failed to end command buffer");
         return *this;
@@ -394,19 +423,20 @@ namespace roxi {
       Context* _context = nullptr;
       VkCommandPool _pool = VK_NULL_HANDLE;
       //
-      Array<VkCommandBuffer> _command_buffers;
+      VkCommandBuffer _command_buffer;
 
-      u32 current_top = 0;
+      u32 _current_top = 0;
       // only allocates linearly, no freeing except all
       std::atomic_flag _flag = ATOMIC_FLAG_INIT;
     public:
       using CommandBufferHandle = u32;
 
-      b8 init(Context* context, const CommandType command_type, const CommandBufferLevelType level_type, const u32 job_count, const u32 queue_handle);
+      b8 init(Context* context, const CommandType command_type, const CommandBufferLevelType level_type, const u32 queue_handle);
 
       const VkCommandPool get_pool() const;
 
       b8 reset() {
+        RX_TRACE("vkResetCommandPool");
         VK_CHECK(_context->get_device()
           .get_device_function_table()
           .vkResetCommandPool(_context->get_device().get_device()
@@ -438,14 +468,11 @@ namespace roxi {
     public:
       
     private:
-      using command_pool_t        = Array<CommandArena>;
-      using handle_pool_t         =          Array<u32>;
+      using secondary_command_pool_t        = Array<CommandArena>;
 
       Context*                       _context = nullptr;
-      command_pool_t                    _command_arenas;
-      handle_pool_t         _free_command_arena_handles;
-
-      u32 top_arena = 0;
+      CommandArena                          _primary_command_arena;
+      secondary_command_pool_t                    _secondary_command_arenas;
 
       //struct CommandInfo {
       //  CommandType _command_type = CommandType::Max;
@@ -454,22 +481,25 @@ namespace roxi {
       //Array<CommandInfo> _command_infos;
 
     public:
-      using ArenaHandle = typename command_pool_t::index_t;
+      using ArenaHandle = typename secondary_command_pool_t::index_t;
 
-      b8 init(Context* context, const u32 queue_handle, const CommandType command_type, const u32 parallelism = RoxiNumThreads, const u32 job_count = 1);
+      b8 init(Context* context, const u32 queue_handle, const CommandType command_type, const u32 parallelism = RoxiNumThreads);
 
       // not thread safe, for preallocating, CommandArena is
       // combo of VkCommandPool and an Array of VkCommandBuffers
-      CommandBuffer obtain_command_buffer(const ArenaHandle handle) {
-        return _command_arenas[handle].obtain_command_buffer();
+
+      const CommandBuffer obtain_primary_command_buffer() {
+        return _primary_command_arena.obtain_command_buffer();
       }
 
-      const ArenaHandle obtain_command_arena() {
-        return (const ArenaHandle)_free_command_arena_handles[top_arena++];
-      }
-
-      void return_command_arena(const ArenaHandle handle) {
-        _free_command_arena_handles[top_arena--] = handle;
+      // will add one to idx to index past 
+      const CommandBuffer obtain_secondary_command_buffer(const u32 idx) {
+        const u32 command_arena_count = _secondary_command_arenas.get_size();
+        if(idx >= command_arena_count) {
+          RX_ERRORF("cannot access secondary command buffer at id %u because there are only %u command arenas allocated", idx, command_arena_count);
+          return {};
+        }
+        return _secondary_command_arenas[idx].obtain_command_buffer();
       }
 
       b8 reset();

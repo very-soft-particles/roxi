@@ -42,8 +42,27 @@
     { LOG(statement, Vulkan);\
       return to_return;\
     })
+#define VK_ASSERTF(cond, statement, ...) STMNT( VkResult r = (cond);   \
+    if (r != VK_SUCCESS)                                  \
+    { LOGF(Vulkan, statement, __VA_ARGS__);                       \
+      DUMP_LOGS();                                          \
+      L_ASSERT_BREAK();                                     \
+    })
+#define VK_CHECKF(cond, statement, ...) STMNT( VkResult r = (cond); \
+    if (r != VK_SUCCESS)                                \
+    { LOGF(Vulkan, statement, __VA_ARGS__);                       \
+      return false;                                     \
+    })
+#define VK_RETURN_VALF(cond, to_return, statement, ...) STMNT( VkResult r = (cond);\
+    if(r != VK_SUCCESS)\
+    { LOGF(Vulkan, statement, __VA_ARGS__);                       \
+      return to_return;\
+    })
 #else
-#define VK_CHECK(cond, statement) (cond)
-#define VK_ASSERT(cond, statement) (cond)
-#define VK_RETURN(cond, statement, to_return) (cond)
+#define VK_CHECK(cond, statement, ...) (cond)
+#define VK_ASSERT(cond, statement, ...) (cond)
+#define VK_RETURN(cond, to_return, statement, ...) (cond)
+#define VK_CHECKF(cond, statement, ...) (cond)
+#define VK_ASSERTF(cond, statement, ...) (cond)
+#define VK_RETURNF(cond, to_return, statement, ...) (cond)
 #endif

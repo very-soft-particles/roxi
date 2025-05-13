@@ -18,6 +18,7 @@
 #include "vk_allocator.hpp"
 #include "vk_buffer.hpp"
 #include "vk_image.hpp"
+#include <vulkan/vulkan_core.h>
 
 #define VK_RESOURCE_TYPES(X) VK_BUFFER_TYPES(X) VK_IMAGE_TYPES(X)
 
@@ -69,6 +70,20 @@ namespace roxi {
       };
     return _s_flags[(u8)type];
   }
+
+  static VkMemoryAllocateFlags get_aux_memory_flags(const gpu::BufferType type) {
+    static const VkMemoryPropertyFlags _s_flags[] = 
+      { VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT
+      , VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT
+      , VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT
+      , VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT
+      , 0
+      , 0
+      , 0
+      };
+    return _s_flags[(u8)type];
+  }
+
 
   static VkMemoryPropertyFlags get_memory_type_flags(const gpu::ImageType type) {
     static const VkMemoryPropertyFlags _s_flags[] = 
@@ -250,6 +265,7 @@ namespace roxi {
     , gpu::BufferType::HostStorageBuffer
     , gpu::BufferType::DeviceStorageBuffer
     , gpu::BufferType::StagingBuffer
+    , gpu::BufferType::IndirectCommand
     , gpu::BufferType::TransferSource
     };
     return _s_buffer_types[(u8)type];

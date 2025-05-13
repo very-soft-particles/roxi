@@ -15,42 +15,63 @@
 // =====================================================================================
 #include "rx_allocator.hpp"
 #include "rx_gpu_device.hpp"
+#include "vk_command.hpp"
+#include "vk_device.h"
+#include "vk_pipeline.hpp"
 #include "vk_renderpass.hpp"
+#include "vk_resource.hpp"
 #include <vulkan/vulkan_core.h>
+#include <winuser.h>
 
 namespace roxi {
 
-  const u8 GPUDevice::Loader::get_buffer_handle_from_ptr(const void* const ptr) {
-    if(ptr >= _staging_buffer_mapped_pointers[0] && ptr < (void*)((u8*)_staging_buffer_mapped_pointers[0] + GPUDeviceSettings::StagingBufferSize)) {
-      return 0;
+  b8 GPUDevice::LoaderManager::init() {
+    _loaders.clear();
+    return true;
+  }
+
+  b8 GPUDevice::LoaderManager::terminate(GPUDevice* device) {
+    const u32 loader_count = _loaders.get_size();
+    for(u32 i = 0; i < loader_count; i++) {
+      _loaders[i].terminate(device);
     }
-    if(ptr >= _staging_buffer_mapped_pointers[1] && ptr < (void*)((u8*)_staging_buffer_mapped_pointers[1] + GPUDeviceSettings::StagingBufferSize)) {
-      return 1;
-    }
-    return MAX_u8;
+    return true;
   }
 
   b8 GPUDevice::Loader::init(const GPUDevice::QueueHandle queue_handle) {
+    _current_buffer_top = 0;
     _queue_handle = queue_handle;
     u8* buffer = (u8*)ALLOCATE
-      ( sizeof(void*) * CommandPoolCount
-      + sizeof(VkBufferCopy) * GPUDeviceSettings::BufferCopiesPerFrame
+      ( sizeof(VkBufferCopy) * GPUDeviceSettings::BufferCopiesPerFrame
 //      + sizeof(VkBufferImageCopy) * GPUDeviceSettings::BufferImageCopiesPerFrame
 //      + sizeof(VkImageCopy) * GPUDeviceSettings::ImageCopiesPerFrame
       );
 
-    _buffer_copies = (VkBufferCopy*)buffer;
+    _buffer_copies.move_ptr(buffer);
+    _buffer_copies.clear();
     buffer += sizeof(VkBufferCopy) * GPUDeviceSettings::BufferCopiesPerFrame;
-
-    _staging_buffer_mapped_pointers.move_ptr(buffer);
-    _staging_buffer_mapped_pointers.push(CommandPoolCount);
-    buffer += sizeof(void*) * CommandPoolCount;
 
 //    _buffer_image_copies.move_ptr(buffer);
 //    buffer += sizeof(VkBufferImageCopy) * GPUDeviceSettings::BufferImageCopiesPerFrame;
 //
 //    _image_copies.move_ptr(buffer);
     RX_END();
+  }
+
+  const GPUDevice::LoaderManager::LoaderHandle GPUDevice::LoaderManager::create_loader(GPUDevice* device, const QueueHandle queue_handle) {
+    static constexpr LoaderHandle OnFailReturn = lofi::index_type_max<LoaderHandle>::value;
+    const auto result = _loaders.get_size();
+    Loader& loader = *(_loaders.push(1));
+    RX_RETURN(loader.init(queue_handle)
+        , "failed to initialize new loader"
+        , OnFailReturn);
+    loader.create_commands(device);
+    loader.create_resources(device);
+    return result;
+  }
+
+  GPUDevice::Loader& GPUDevice::LoaderManager::obtain_loader(const LoaderHandle handle) {
+    return _loaders[handle];
   }
 
   b8 GPUDevice::init(void* window, const u32 system_count, const vk::QueueType* system_queue_types) {
@@ -119,6 +140,8 @@ namespace roxi {
       context_builder.add_queue_type(system_queue_types[i]);
     }
 
+    auto transfer_queue_handle = context_builder.add_queue_type(vk::QueueType::Transfer);
+
     RX_TRACE("building vulkan context");
     RX_CHECK(context_builder.build(&_context)
         , "failed to build roxi::vk::Context in roxi::GPUDevice::init()");
@@ -152,16 +175,30 @@ namespace roxi {
 
     // one primary command per queue per frame
 
+    _timelines.clear();
     _timelines.move_ptr(buffer);
     _timelines.push(system_count);
     
     buffer += sizeof(vk::TimelineSemaphore) * system_count;
+    _fence_pool.clear();
     _fence_pool.move_ptr(buffer);
 
     buffer += sizeof(vk::Fence) * GPUDeviceSettings::MaxFenceCount;
     _semaphore_pool.move_ptr(buffer);
 
+    RX_TRACE("initializing loader");
+    _loader_manager.init();
+
     RX_END();
+  }
+
+  GPUDevice::TransferAllocation GPUDevice::Loader::allocate(GPUDevice* device, const u32 size) {
+    VkBufferCopy& buffer_copy = *(_buffer_copies.push(1));
+    buffer_copy.size = size;
+    const u32 offset = push_to_staging_buffer(size);
+    buffer_copy.dstOffset = offset;
+    buffer_copy.srcOffset = offset;
+    return {&device->obtain_resource_pool(_resource_pool_handle).obtain_buffer(TransferBufferHandle), _staging_buffer_mapped_pointer, offset};
   }
 
   b8 GPUDevice::create_framebuffers(const u32 count, vk::Framebuffer* const framebuffers, const vk::FramebufferCreation* const creations, const ResourcePoolHandle resource_pool_handle) {
@@ -170,7 +207,16 @@ namespace roxi {
       RX_CHECKF(framebuffers[i].init(&_context, creations[i], obtain_resource_pool(resource_pool_handle))
           , "failed to create framebuffer id %u with resource pool %u", i, resource_pool_handle);
     }
+
     RX_END();
+  }
+
+  const GPUDevice::LoaderManager::LoaderHandle GPUDevice::create_loader(const QueueHandle queue_handle) {
+    return _loader_manager.create_loader(this, queue_handle);
+  }
+
+  const GPUDevice::Loader& GPUDevice::obtain_loader(const GPUDevice::LoaderManager::LoaderHandle handle) {
+    return _loader_manager.obtain_loader(handle);
   }
 
   const GPUDevice::PipelinePoolHandle GPUDevice::create_pipeline_pool(const DescriptorPoolHandle descriptor_pool_handle, const u32 pipeline_count, const u32 render_pass_count, vk::PipelineInfo* pipeline_infos, vk::RenderPassInfo* render_pass_infos) {
@@ -183,6 +229,7 @@ namespace roxi {
     }
 
     for(u32 i = 0; i < pipeline_count; i++) {
+      RX_TRACEF("vertex shader name in add_pipeline = %s", pipeline_infos[i].graphics.vertex_shader_name);
       builder.add_pipeline(pipeline_infos[i]);
     }
 
@@ -209,14 +256,14 @@ namespace roxi {
 
 
     // not internally synchronized, one pool per system frame
-  const GPUDevice::CommandPoolHandle GPUDevice::create_command_pools(const vk::CommandType command_type, const QueueHandle queue_handle, const u32 pool_count, const u32 parallelism, const u32 job_count) {
+  const GPUDevice::CommandPoolHandle GPUDevice::create_command_pools(const vk::CommandType command_type, const QueueHandle queue_handle, const u32 pool_count, const u32 parallelism) {
 
     CommandPoolHandle result = _command_pools.get_size();
     vk::CommandPool* const command_pools_begin = _command_pools.push(pool_count);
     RX_TRACEF("initializing %u command pools", pool_count);
     for(u32 i = 0; i < pool_count; i++) {
       RX_TRACEF("initializing pool %u", i);
-      RX_RETURNF(command_pools_begin[i].init(&_context, queue_handle, command_type, parallelism, job_count)
+      RX_RETURNF(command_pools_begin[i].init(&_context, queue_handle, command_type, parallelism)
         , lofi::index_type_max<CommandPoolHandle>::value
         , "failed to initialize command pool %u for queue %u"
         , i
@@ -232,15 +279,9 @@ namespace roxi {
     RX_END_RESULT(result);
   }
 
-  // current implementation works through the use of an internal synchronization mechanism
-  // which does not rely on vkWaitForFences and uses the fiber wait functionality to ensure
-  // that the function is non-blocking, there is the option of using the standard
-  // vkWaitForFences vulkan API call, but it means that this function MUST be called from
-  // inside of a reactor job
-  b8 GPUDevice::transfer_queue_submit_immediate(vk::CommandBuffer buffer_to_submit, const FenceHandle wait_fence, const vk::Semaphore signal_semaphore) {
+  b8 GPUDevice::queue_submit_immediate(const QueueHandle queue_handle, vk::CommandBuffer buffer_to_submit, const FenceHandle signal_fence, const u32 wait_semaphore_count, const SemaphoreHandle* wait_semaphores) {
     // fiber will wait on this job to finish
     // must be call from a fiber
-    wait_for_fence(wait_fence);
 
 //    alternative standard blocking implementation, if used, this function cannot be called
 //    from a fiber
@@ -249,24 +290,76 @@ namespace roxi {
 //      , "wait for vk::Fence in roxi::vk::GPUDevice::transfer_queue_submit_immediate() timed out");
 //
 
+    VkCommandBufferSubmitInfo command_info{};
+    command_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+    command_info.commandBuffer = buffer_to_submit.get_command_buffer();
+
+    StackArray<VkSemaphoreSubmitInfo> wait_infos{};
+    wait_infos.push(wait_semaphore_count);
+    for(u32 i = 0; i < wait_semaphore_count; i++) {
+      wait_infos[i].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+      wait_infos[i].semaphore = obtain_semaphore(wait_semaphores[i]).get_semaphore();
+    }
+
+    VkSubmitInfo2 submit_info{VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
+    submit_info.commandBufferInfoCount = 1;
+    submit_info.pCommandBufferInfos = &command_info;
+    submit_info.pWaitSemaphoreInfos = wait_infos.get_buffer();
+    submit_info.waitSemaphoreInfoCount = wait_semaphore_count;
+
+    RX_TRACE("vkQueueSubmit2");
     _context.get_device().get_device_function_table()
-      .vkResetFences(_context.get_device().get_device(), 1, &obtain_fence(wait_fence).get_fence());
+      .vkQueueSubmit2(_queue_pool[queue_handle], 1, &submit_info, obtain_fence(signal_fence).get_fence());
+
+    RX_END();
+  }
+
+
+
+  // current implementation works through the use of an internal synchronization mechanism
+  // which does not rely on vkWaitForFences and uses the fiber wait functionality to ensure
+  // that the function is non-blocking, there is the option of using the standard
+  // vkWaitForFences vulkan API call, but it means that this function MUST be called from
+  // inside of a reactor job
+  b8 GPUDevice::queue_submit_immediate(const QueueHandle queue_handle, vk::CommandBuffer buffer_to_submit, const u32 wait_semaphore_count, const SemaphoreHandle* wait_semaphores, const u32 signal_semaphore_count, const SemaphoreHandle* signal_semaphores) {
+    // fiber will wait on this job to finish
+    // must be call from a fiber
+
+//    alternative standard blocking implementation, if used, this function cannot be called
+//    from a fiber
+//    VK_CHECK(_context.get_device().get_device_function_table()
+//      .vkWaitForFences(_context.get_device().get_device(), 1, &wait_fence.get_fence(), VK_TRUE, 1000000)
+//      , "wait for vk::Fence in roxi::vk::GPUDevice::transfer_queue_submit_immediate() timed out");
+//
 
     VkCommandBufferSubmitInfo command_info{};
     command_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
     command_info.commandBuffer = buffer_to_submit.get_command_buffer();
 
-    VkSemaphoreSubmitInfo signal_info{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
-    signal_info.semaphore = signal_semaphore.get_semaphore();
+    StackArray<VkSemaphoreSubmitInfo> wait_infos{};
+    wait_infos.push(wait_semaphore_count);
+    for(u32 i = 0; i < wait_semaphore_count; i++) {
+      wait_infos[i].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+      wait_infos[i].semaphore = obtain_semaphore(wait_semaphores[i]).get_semaphore();
+    }
+
+
+    StackArray<VkSemaphoreSubmitInfo>  signal_infos{};
+    signal_infos.push(signal_semaphore_count);
+    for(u32 i = 0; i < signal_semaphore_count; i++) {
+      signal_infos[i].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+      signal_infos[i].semaphore = obtain_semaphore(wait_semaphores[i]).get_semaphore();
+    }
 
     VkSubmitInfo2 submit_info{VK_STRUCTURE_TYPE_SUBMIT_INFO_2};
     submit_info.commandBufferInfoCount = 1;
     submit_info.pCommandBufferInfos = &command_info;
-    submit_info.pSignalSemaphoreInfos = &signal_info;
-    submit_info.signalSemaphoreInfoCount = 1;
+    submit_info.pSignalSemaphoreInfos = signal_infos.get_buffer();
+    submit_info.signalSemaphoreInfoCount = signal_semaphore_count;
 
+    RX_TRACE("vkQueueSubmit2");
     _context.get_device().get_device_function_table()
-      .vkQueueSubmit2(_queue_pool[GPUDeviceSettings::TransferQueueHandle], 1, &submit_info, obtain_fence(wait_fence).get_fence());
+      .vkQueueSubmit2(_queue_pool[queue_handle], 1, &submit_info, {});
 
     RX_END();
   }
@@ -287,6 +380,7 @@ namespace roxi {
     VkSemaphoreSubmitInfo wait_infos[16];
 
     for(u32 i = 0; i < wait_semaphore_count; i++) {
+      wait_infos[i] = {};
       wait_infos[i].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
       // hacky workaround for the fact that the compute queue is static constexpr = 2 and transfer = 1
       wait_infos[i].semaphore = obtain_semaphore(wait_semaphores[i]).get_semaphore();
@@ -295,7 +389,8 @@ namespace roxi {
 
     VkSemaphoreSubmitInfo signal_infos[16];
 
-    for(u32 i = 0; i < wait_semaphore_count; i++) {
+    for(u32 i = 0; i < signal_semaphore_count; i++) {
+      signal_infos[i] = {};
       signal_infos[i].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
       // hacky workaround for the fact that the compute queue is static constexpr = 2 and transfer = 1
       signal_infos[i].semaphore = obtain_semaphore(signal_semaphores[i]).get_semaphore();
@@ -307,11 +402,12 @@ namespace roxi {
     submit_info.pCommandBufferInfos = &command_info;
     submit_info.pSignalSemaphoreInfos = signal_infos;
     submit_info.pWaitSemaphoreInfos = wait_infos;
-    submit_info.signalSemaphoreInfoCount = wait_semaphore_count;
-    submit_info.waitSemaphoreInfoCount = signal_semaphore_count;
+    submit_info.waitSemaphoreInfoCount = wait_semaphore_count;
+    submit_info.signalSemaphoreInfoCount = signal_semaphore_count;
 
-    RX_CHECKF(_context.get_device().get_device_function_table()
-      .vkQueueSubmit2(_queue_pool[queue], 1, &submit_info, obtain_fence(signal_fence).get_fence())
+  
+    VK_CHECKF(_context.get_device().get_device_function_table()
+      .vkQueueSubmit2(_queue_pool[queue], 1, &submit_info, signal_fence == lofi::index_type_max<FenceHandle>::value ? VK_NULL_HANDLE : obtain_fence(signal_fence).get_fence())
       , "failed to properly submit primary command buffer with queue handle = %u"
       , queue);
 
@@ -319,93 +415,62 @@ namespace roxi {
   }
 
   void GPUDevice::Loader::create_resources(GPUDevice* device) {
+    StackArray<gpu::ResourceInfo> resources{};
+    gpu::ResourceInfo* buffer_info = resources.push(2);
+    buffer_info[StagingBufferHandle].type = gpu::ResourceType::StagingBuffer;
+    buffer_info[StagingBufferHandle].buffer.size = GPUDeviceSettings::StagingBufferSize;
+    buffer_info[TransferBufferHandle].type = gpu::ResourceType::TransferSource;
+    buffer_info[TransferBufferHandle].buffer.size = GPUDeviceSettings::StagingBufferSize;
 
-    StackArray<gpu::ResourceInfo> resources;
-    _staging_buffer_handles_begin = 0;
-    for(u32 i = 0; i < CommandPoolCount; i++) {
-      gpu::ResourceInfo& staging_buffer_info = *(resources.push(1));
-      staging_buffer_info.type = gpu::ResourceType::StagingBuffer;
-      staging_buffer_info.buffer.size = GPUDeviceSettings::StagingBufferSize;
-    }
 
-    _transfer_source_handles_begin = CommandPoolCount;
-    for(u32 i = 0; i < CommandPoolCount; i++) {
-      gpu::ResourceInfo& transfer_source_info = *(resources.push(1));
-      transfer_source_info.type = gpu::ResourceType::TransferSource;
-      transfer_source_info.buffer.size = GPUDeviceSettings::StagingBufferSize;
-    }
-
-    _resource_pool_handle = device->create_resource_pool(2 * CommandPoolCount, 0, resources.get_buffer(), nullptr);
+    _resource_pool_handle = device->create_resource_pool(2, 0, resources.get_buffer(), nullptr);
+    _transfer_submission_semaphore = device->create_semaphore();
 
     vk::ResourcePool& resource_pool = device->obtain_resource_pool(_resource_pool_handle);
-
-    for(u32 i = 0; i < CommandPoolCount; i++) {
-      _staging_buffer_mapped_pointers[i] = resource_pool.obtain_buffer(_staging_buffer_handles_begin + i).map();
-      _transfer_blocking_fences[i] = device->create_fence(true);
-      _transfer_submission_semaphores[i] = device->create_semaphore();
-    }
-
+    _staging_buffer_mapped_pointer = resource_pool.obtain_buffer(StagingBufferHandle).map();
   }
 
   // reactor job, may wait fiber
   const b8 GPUDevice::Loader::transfer(GPUDevice* device) {
-    const auto top = _buffer_copies_top.get_count();
+    const auto copy_count = _buffer_copies.get_size();
+    vk::CommandPool& command_pool = device->obtain_command_pool(_command_pool_handle);
+    vk::CommandBuffer command_buffer = command_pool.obtain_primary_command_buffer();
     vk::ResourcePool& pool = device->obtain_resource_pool(_resource_pool_handle);
-    const vk::Buffer& staging_buffer = pool.obtain_buffer(_staging_buffer_handles_begin + _current_buffer);
-    const vk::Buffer& transfer_source = pool.obtain_buffer(_transfer_source_handles_begin + _current_buffer);
-    _current_primary_buffer.begin();
-    _current_primary_buffer.record_copy_buffer(staging_buffer, transfer_source, top, _buffer_copies);
-    _current_primary_buffer.end();
-    swap_buffers_and_submit(device);
+    const vk::Buffer& staging_buffer = pool.obtain_buffer(StagingBufferHandle);
+    const vk::Buffer& transfer_source = pool.obtain_buffer( TransferBufferHandle);
+    command_buffer
+      .begin()
+      .record_copy_buffer(staging_buffer, transfer_source, copy_count, _buffer_copies.get_buffer())
+      .end();
+    submit(device, command_buffer);
     RX_END();
   }
 
-  vk::Semaphore& GPUDevice::Loader::get_signal_semaphore(GPUDevice* device) {
-    RX_END_RESULT(device->obtain_semaphore(_transfer_submission_semaphores[_current_buffer]));
+  GPUDevice::SemaphoreHandle GPUDevice::Loader::get_signal_semaphore_handle() {
+    return _transfer_submission_semaphore;
   }
 
-  const vk::Buffer GPUDevice::Loader::get_transfer_source(GPUDevice* device) {
-    RX_END_RESULT(device->obtain_resource_pool(_resource_pool_handle).obtain_buffer(_transfer_source_handles_begin + _current_buffer));
+  const vk::Buffer& GPUDevice::Loader::get_transfer_source(GPUDevice* device) {
+    RX_END_RESULT(device->obtain_resource_pool(_resource_pool_handle).obtain_buffer(TransferBufferHandle));
   }
 
   // reactor job, may wait fiber
-  const u8 GPUDevice::Loader::swap_buffers_and_submit(GPUDevice* device) {
-    const auto current_buffer_handle = _current_buffer;
-    const vk::CommandBuffer current_buffer = _current_primary_buffer;
-    _current_buffer ^= 1;
-    _current_buffer_top.reset();
-    vk::CommandPool& pool = device->obtain_command_pool(_command_pool_handles_begin + _current_buffer);
-    pool.reset();
-    _current_primary_buffer = pool.obtain_command_buffer(pool.obtain_command_arena());
+  const b8 GPUDevice::Loader::submit(GPUDevice* device, vk::CommandBuffer command_buffer) {
 
-    device->transfer_queue_submit_immediate(current_buffer, _transfer_blocking_fences[current_buffer_handle],  device->obtain_semaphore(_transfer_submission_semaphores[current_buffer_handle]));
-    _buffer_copies_top.reset();
+    RX_CHECK(device->queue_submit(_queue_handle, command_buffer, 0, nullptr, 1, &_transfer_submission_semaphore)
+        , "failed to submit transfer command");
     
-    RX_END_RESULT(_current_buffer);
-  }
-
-  const GPUDevice::SemaphoreHandle GPUDevice::Loader::get_corresponding_semaphore_for_staging_ptr(const void* const ptr) {
-    const u8 handle = get_buffer_handle_from_ptr(ptr);
-    RX_RETURNF(handle == MAX_u8
-      , lofi::index_type_max<SemaphoreHandle>::value
-      , "neither staging buffer owns this pointer %p queried for signal semaphore"
-      , ptr);
-    return _transfer_submission_semaphores[handle];
-  }
-
-  const vk::Buffer& GPUDevice::Loader::get_corresponding_transfer_buffer_for_staging_ptr(GPUDevice* device, const void* const ptr) {
-    const u8 handle = get_buffer_handle_from_ptr(ptr);
-    RX_ASSERT(handle != MAX_u8, "failed to find corresponding transfer buffer");
-    return device->obtain_resource_pool(_resource_pool_handle).obtain_buffer(_transfer_source_handles_begin + handle);
+    RX_END();
   }
 
   // maps buffer to buffer
   const b8 GPUDevice::Loader::queue_copy(const u32 offset, const u32 size) {
-    const auto idx = _buffer_copies_top++;
-    RX_CHECK(idx >= GPUDeviceSettings::BufferCopiesPerFrame
+    const auto idx = _buffer_copies.get_size();
+    RX_TRACEF("buffer copy count = %u", idx);
+    RX_CHECK(idx < GPUDeviceSettings::BufferCopiesPerFrame
       , "too many buffer copies in GPUDevice::_loader at frame");
 
-    VkBufferCopy& buffer_copy = _buffer_copies[idx];
+    VkBufferCopy& buffer_copy = *(_buffer_copies.push(1));
     buffer_copy.dstOffset = offset;
     buffer_copy.srcOffset = offset;
     buffer_copy.size = size;
@@ -413,42 +478,40 @@ namespace roxi {
   }
 
   const u32 GPUDevice::Loader::push_to_staging_buffer(const u32 push_bytes) {
-    const auto result = _current_buffer_top.add(push_bytes);
+    const auto result = _current_buffer_top;
+    _current_buffer_top += push_bytes;
+    RX_TRACEF("staging buffer offset = %u", result);
     RX_RETURN(queue_copy(result, push_bytes)
       , "failed to create buffer copy in get staging buffer raw pointer"
       , MAX_u32);
     RX_END_RESULT(result);
   }
 
-  void* GPUDevice::Loader::get_staging_buffer_raw_pointer() {
-    RX_END_RESULT(_staging_buffer_mapped_pointers[_current_buffer]);
-  }
-
   // returns to offset
   const u32 GPUDevice::Loader::copy_to_staging_buffer(void* src, const u32 num_bytes_to_copy) {
-    const u32 result = _current_buffer_top.add(num_bytes_to_copy); 
-    RX_RETURNF(queue_copy(result, num_bytes_to_copy)
-        , MAX_u32
-        , "tried to copy too many buffer copies into staging buffer in GPUDevice::Loader::copy_to_staging_buffer() with current buffer = %u", _current_buffer, result);
+    const u32 result = _current_buffer_top;
+    _current_buffer_top += num_bytes_to_copy;
+    RX_RETURN(queue_copy(result, num_bytes_to_copy)
+        , "tried to copy too many buffer copies into staging buffer"
+        , MAX_u32);
     RX_RETURNF(result + num_bytes_to_copy < GPUDeviceSettings::StagingBufferSize
         , MAX_u32
-        , "tried to copy too many bytes into staging buffer in GPUDevice::Loader::copy_to_staging_buffer() with current buffer = %u and size before copy = %u", _current_buffer, result);
+        , "tried to copy too many bytes into staging buffer, size before copy = %u, size after = %u", result, _current_buffer_top);
 
-    MEM_COPY((u8*)_staging_buffer_mapped_pointers[_current_buffer] + result, src, num_bytes_to_copy);
+    MEM_COPY((u8*)_staging_buffer_mapped_pointer + result, src, num_bytes_to_copy);
     RX_END_RESULT(result);
   }
 
   void GPUDevice::Loader::create_commands(GPUDevice* device) {
-    _command_pool_handles_begin = device->create_command_pools(vk::CommandType::Transfer, _queue_handle, CommandPoolCount, 1, 1);
+    _command_pool_handle = device->create_command_pools(vk::CommandType::Transfer, _queue_handle, 1, 1);
   }
 
   // currently unused
   b8 GPUDevice::Loader::terminate(GPUDevice* device) {
-
-    RX_CHECK(_buffer_copies != nullptr,
+    RX_CHECK(_buffer_copies.get_buffer() != nullptr,
         "tried to terminate GPUDevice::_loader but it was never initialized");
 
-    FREE(_buffer_copies);
+    FREE(_buffer_copies.get_buffer());
     RX_END();
   }
 
@@ -531,10 +594,11 @@ namespace roxi {
     return _pipeline_pools[handle];
   }
 
-  const GPUDevice::DescriptorPoolHandle GPUDevice::create_descriptor_pool(const u32 ubo_count, const u32 storage_count, const u32 texture_count, const u32 image_count) {
+  const GPUDevice::DescriptorPoolHandle GPUDevice::create_descriptor_pool(const u32 ubo_count, const u32 storage_count, const u32 texture_count, const u32 image_count, const PipelinePoolHandle pipeline_handle) {
     const DescriptorPoolHandle result = _descriptor_pools.get_size();
     vk::DescriptorPool& pool = *(_descriptor_pools.push(1));
-    RX_RETURN(pool.init(&_context, ubo_count, storage_count, texture_count, image_count)
+    const vk::PipelinePool& pipeline_pool = obtain_pipeline_pool(pipeline_handle);
+    RX_RETURN(pool.init(&_context, ubo_count, pipeline_pool.get_uniform_layout_size(&_context), storage_count, pipeline_pool.get_storage_layout_size(&_context), texture_count, pipeline_pool.get_texture_layout_size(&_context), image_count, pipeline_pool.get_image_layout_size(&_context))
       , "failed to create descriptor pool"
       , lofi::index_type_max<DescriptorPoolHandle>::value
       );

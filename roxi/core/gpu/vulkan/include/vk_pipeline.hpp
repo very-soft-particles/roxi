@@ -239,7 +239,7 @@ namespace roxi {
         VkComputePipelineCreateInfo create_info{};
         create_info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
         create_info.pNext = nullptr;
-        create_info.flags = 0;
+        create_info.flags = VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
         create_info.layout = _layout;
         create_info.basePipelineHandle = VK_NULL_HANDLE;
         create_info.basePipelineIndex = -1;
@@ -475,6 +475,22 @@ namespace roxi {
     //    FREE(buffer);
     //    return true;
     //  }
+
+      const VkDeviceSize get_uniform_layout_size(Context* context) const {
+        return _descriptor_set_layouts[0].get_layout_size(context);
+      }
+
+      const VkDeviceSize get_storage_layout_size(Context* context) const {
+        return _descriptor_set_layouts[1].get_layout_size(context);
+      }
+
+      const VkDeviceSize get_texture_layout_size(Context* context) const {
+        return _descriptor_set_layouts[2].get_layout_size(context);
+      }
+
+      const VkDeviceSize get_image_layout_size(Context* context) const {
+        return _descriptor_set_layouts[3].get_layout_size(context);
+      }
 
       const Pipeline& obtain_pipeline(PipelineHandle handle) const {
         return _pipelines[handle];

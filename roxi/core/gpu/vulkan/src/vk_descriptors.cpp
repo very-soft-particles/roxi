@@ -17,6 +17,7 @@
 #include "vk_buffer.hpp"
 #include "vk_descriptors.hpp"
 #include "vk_allocator.hpp"
+#include "vk_image.hpp"
 #include "vk_resource.hpp"
 #include <vulkan/vulkan_core.h>
 
@@ -62,15 +63,34 @@ namespace roxi {
       return _s_descriptor_types[idx];
     }
 
-    b8 DescriptorBufferArena::init(Context* context, const DescriptorBufferType type, const VkDeviceSize descriptor_size, const VkDeviceSize offset_alignment, const u32 count) {
-      _descriptor_size = descriptor_size;
-      _buffer_size = count * descriptor_size;
+    b8 DescriptorBufferArena::init(Context* context, const DescriptorBufferType type) {
+      _buffer_count = 0;
+      _descriptor_counter = 0;
+      _descriptor_size = 0;
       _type = type;
       RX_CHECK
         ( _descriptor_buffer
             .init
               ( context
-              , _buffer_size
+              , 0
+              , gpu::BufferType::DescriptorBuffer
+              , get_descriptor_buffer_usage_flags(type)
+              )
+        , "failed to init descriptor buffer"
+        );
+      return true;
+    }
+
+    b8 DescriptorBufferArena::init(Context* context, const DescriptorBufferType type, const VkDeviceSize descriptor_size, const u32 buffer_size, const VkDeviceSize offset_alignment, const u32 count) {
+      _buffer_count = count;
+      _descriptor_counter = 0;
+      _descriptor_size = descriptor_size;
+      _type = type;
+      RX_CHECK
+        ( _descriptor_buffer
+            .init
+              ( context
+              , buffer_size + offset_alignment
               , gpu::BufferType::DescriptorBuffer
               , get_descriptor_buffer_usage_flags(type)
               )
@@ -88,23 +108,27 @@ namespace roxi {
     }
 
     DescriptorAllocation DescriptorBufferArena::allocate(Context* context, const u64 descriptor_count, const u64 descriptor_offset_alignment) {
-      const auto descriptor_size = (descriptor_count * _descriptor_size) + descriptor_offset_alignment;
+      const u32 buffer_id = _buffer_count;
+      _buffer_count += descriptor_count;
+      const auto descriptor_size = (descriptor_count * (_descriptor_size + descriptor_offset_alignment));
+      RX_TRACEF("attempting to allocate descriptor size = %llu, descriptor count = %llu, descriptor offset alignment = %llu, current descriptor buffer size = %llu, buffer size = %llu", _descriptor_size, descriptor_count, descriptor_offset_alignment, _descriptor_counter, get_buffer_byte_size());
 #if defined (RX_USE_VK_LOCK_FREE_MEMORY)
       auto offset = _descriptor_counter.add(descriptor_size);
       RX_ASSERT
-        ( ((offset + descriptor_size) < _buffer_size)
+        ( ((descriptor_size) < _buffer_size)
         , "descriptor buffer overflow!"
         );
 #else
       auto offset = _descriptor_counter;
       _descriptor_counter += descriptor_size;
       RX_ASSERT
-        ( (_descriptor_counter < _buffer_size)
+        ( (_descriptor_counter < get_buffer_byte_size())
         , "descriptor buffer overflow!");
 #endif
       DescriptorAllocation result;
       result.offset = ALIGN_POW2(offset, descriptor_offset_alignment);
-      result.size = descriptor_count * _descriptor_size;
+      result.size = _descriptor_size;
+      result.id = buffer_id;
 
       return result;
     }
@@ -116,6 +140,7 @@ namespace roxi {
 #else 
       _descriptor_counter = 0;
 #endif
+
     }
 
     b8 DescriptorBufferArena::terminate() {
@@ -125,6 +150,8 @@ namespace roxi {
 
     b8 DescriptorSetLayoutCreation::init() {
       _bindings.move_ptr(ALLOCATE(sizeof(BindingInfo) * s_max_descriptor_set_layout_bindings));
+      _bindings.clear();
+      _flags = 0;
       RX_CHECK
         ( _bindings.get_buffer() != nullptr
         , "could not allocate bindings for Descriptor Set Layout Builder"
@@ -153,6 +180,7 @@ namespace roxi {
     }
 
     void DescriptorSetLayoutCreation::clear_bindings() {
+      RX_TRACEF("clearing bindings, binding count = %u", _bindings.get_size());
       _bindings.clear();
     }
 
@@ -173,6 +201,7 @@ namespace roxi {
     }
 
     b8 DescriptorSetLayout::init(Context* context, const DescriptorSetLayoutCreation& creation) {
+      _bindings.clear();
       VkDescriptorSetLayoutCreateInfo create_info = creation.get_create_info();
       VK_CHECK(context->get_device().get_device_function_table()
         .vkCreateDescriptorSetLayout
@@ -184,6 +213,7 @@ namespace roxi {
         , "failed to create descriptor set layout in DescriptorSetLayout::init(Context*, const DescriptorSetLayoutCreation&)");
       const u32 binding_count = create_info.bindingCount;
       VkDescriptorType* const bindings_begin = _bindings.push(binding_count);
+      RX_TRACEF("creating %u bindings", binding_count);
       for(u32 i = 0; i < binding_count; i++) {
         bindings_begin[i] = create_info.pBindings[i].descriptorType;
       }
@@ -256,7 +286,7 @@ namespace roxi {
       return true;
     }
 
-    b8 DescriptorPool::init(Context* context, const u32 uniform_buffer_count, const u32 storage_buffer_count, const u32 texture_count, const u32 storage_image_count) {
+    b8 DescriptorPool::init(Context* context, const u32 uniform_buffer_count, const u32 uniform_layout_size, const u32 storage_buffer_count, const u32 storage_layout_size, const u32 texture_count, const u32 texture_layout_size, const u32 storage_image_count, const u32 image_layout_size) {
 
       _context = context;
 
@@ -275,30 +305,42 @@ namespace roxi {
 
       if(uniform_buffer_count != 0) {
         RX_TRACE("creating ubo descriptor arena");
-        _descriptor_arenas[UniformArenaIndex].init(context, DescriptorBufferType::Uniform, ubo_descriptor_size, descriptor_buffer_offset, uniform_buffer_count);  
+        _descriptor_arenas[(u8)DescriptorBufferType::Uniform].init(context, DescriptorBufferType::Uniform, ubo_descriptor_size, uniform_layout_size, descriptor_buffer_offset, uniform_buffer_count);  
         RX_TRACE("registering ubo memory bucket");
-        bucket_ids[UniformArenaIndex] = memory_builder.register_bucket(ubo_descriptor_size * uniform_buffer_count, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+        bucket_ids[(u8)DescriptorBufferType::Uniform] = memory_builder.register_bucket(ubo_descriptor_size * uniform_buffer_count + descriptor_buffer_offset, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+      } else {
+        //_descriptor_arenas[(u8)DescriptorBufferType::Uniform].init(context,  DescriptorBufferType::Uniform);
+        _descriptor_arenas[(u8)DescriptorBufferType::Uniform] = {};
       }
 
       if(storage_buffer_count != 0) {
         RX_TRACE("creating storage descriptor arena");
-        _descriptor_arenas[StorageArenaIndex].init(context, DescriptorBufferType::Storage, storage_descriptor_size, descriptor_buffer_offset, storage_buffer_count);  
+        _descriptor_arenas[(u8)DescriptorBufferType::Storage].init(context, DescriptorBufferType::Storage, storage_descriptor_size, storage_layout_size, descriptor_buffer_offset, storage_buffer_count);  
         RX_TRACE("registering storage memory bucket");
-        bucket_ids[StorageArenaIndex] = memory_builder.register_bucket(storage_descriptor_size * storage_buffer_count, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+        bucket_ids[(u8)DescriptorBufferType::Storage] = memory_builder.register_bucket(storage_descriptor_size * storage_buffer_count + descriptor_buffer_offset, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+      } else {
+        //_descriptor_arenas[(u8)DescriptorBufferType::Storage].init(context,  DescriptorBufferType::Storage);
+        _descriptor_arenas[(u8)DescriptorBufferType::Storage] = {};
       }
 
       if(texture_count != 0) {
-        RX_TRACE("creating texture descriptor arena");
-        _descriptor_arenas[TextureArenaIndex].init(context, DescriptorBufferType::CombinedImageSampler, texture_descriptor_size, descriptor_buffer_offset, texture_count);  
-        RX_TRACE("registering texture memory bucket");
-        bucket_ids[TextureArenaIndex] = memory_builder.register_bucket(texture_descriptor_size * texture_count, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+        RX_TRACE("creating ubo descriptor arena");
+        _descriptor_arenas[(u8)DescriptorBufferType::CombinedImageSampler].init(context, DescriptorBufferType::CombinedImageSampler, texture_descriptor_size, texture_layout_size, descriptor_buffer_offset, texture_count);  
+        RX_TRACE("registering ubo memory bucket");
+        bucket_ids[(u8)DescriptorBufferType::CombinedImageSampler] = memory_builder.register_bucket(texture_descriptor_size * texture_count + descriptor_buffer_offset, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+      } else {
+        //_descriptor_arenas[(u8)DescriptorBufferType::CombinedImageSampler].init(context,  DescriptorBufferType::CombinedImageSampler);
+        _descriptor_arenas[(u8)DescriptorBufferType::CombinedImageSampler] = {};
       }
 
       if(storage_image_count != 0) {
-        RX_TRACE("creating image descriptor arena");
-        _descriptor_arenas[ImageArenaIndex].init(context, DescriptorBufferType::StorageImage, image_descriptor_size, descriptor_buffer_offset, storage_image_count);  
-        RX_TRACE("registering storage image memory bucket");
-        bucket_ids[ImageArenaIndex] = memory_builder.register_bucket(image_descriptor_size * storage_image_count, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+        RX_TRACE("creating storage descriptor arena");
+        _descriptor_arenas[(u8)DescriptorBufferType::StorageImage].init(context, DescriptorBufferType::StorageImage, image_descriptor_size, image_layout_size, descriptor_buffer_offset, storage_image_count);  
+        RX_TRACE("registering storage memory bucket");
+        bucket_ids[(u8)DescriptorBufferType::StorageImage] = memory_builder.register_bucket(image_descriptor_size * storage_image_count + descriptor_buffer_offset, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+      } else {
+        //_descriptor_arenas[(u8)DescriptorBufferType::StorageImage].init(context,  DescriptorBufferType::StorageImage);
+        _descriptor_arenas[(u8)DescriptorBufferType::StorageImage] = {};
       }
 
       RX_TRACE("building descriptor memory pool");
@@ -307,32 +349,65 @@ namespace roxi {
 
       if(uniform_buffer_count != 0) {
         RX_TRACE("binding ubo descriptor memory");
-        const u32 bucket_id = bucket_ids[UniformArenaIndex];
-        RX_CHECK(_descriptor_arenas[UniformArenaIndex].bind(_memory_pool.allocate(bucket_id, _descriptor_arenas[bucket_id].get_buffer_byte_size())), "failed to bind ubo descriptor buffer");
+        const u32 bucket_id = bucket_ids[(u8)DescriptorBufferType::Uniform];
+        RX_CHECK(_descriptor_arenas[(u8)DescriptorBufferType::Uniform].bind(_memory_pool.allocate(bucket_id, _descriptor_arenas[bucket_id].get_buffer_byte_size())), "failed to bind ubo descriptor buffer");
       }
 
       if(storage_buffer_count != 0) {
         RX_TRACE("binding storage descriptor memory");
-        const u32 bucket_id = bucket_ids[StorageArenaIndex];
-        RX_CHECK(_descriptor_arenas[StorageArenaIndex].bind(_memory_pool.allocate(bucket_id, _descriptor_arenas[bucket_id].get_buffer_byte_size())), "failed to bind storage descriptor buffer");
+        const u32 bucket_id = bucket_ids[(u8)DescriptorBufferType::Storage];
+        RX_CHECK(_descriptor_arenas[(u8)DescriptorBufferType::Storage].bind(_memory_pool.allocate(bucket_id, _descriptor_arenas[bucket_id].get_buffer_byte_size())), "failed to bind storage descriptor buffer");
       }
 
       if(texture_count != 0) {
         RX_TRACE("binding texture descriptor memory");
-        const u32 bucket_id = bucket_ids[TextureArenaIndex];
-        RX_CHECK(_descriptor_arenas[TextureArenaIndex].bind(_memory_pool.allocate(bucket_id, _descriptor_arenas[bucket_id].get_buffer_byte_size())), "failed to bind texture descriptor buffer");
+        const u32 bucket_id = bucket_ids[(u8)DescriptorBufferType::CombinedImageSampler]; RX_CHECK(_descriptor_arenas[(u8)DescriptorBufferType::CombinedImageSampler].bind(_memory_pool.allocate(bucket_id, _descriptor_arenas[bucket_id].get_buffer_byte_size())), "failed to bind texture descriptor buffer");
       }
 
       if(storage_image_count != 0) {
         RX_TRACE("binding image descriptor memory");
-        const u32 bucket_id = bucket_ids[ImageArenaIndex];
-        RX_CHECK(_descriptor_arenas[ImageArenaIndex].bind(_memory_pool.allocate(bucket_id, _descriptor_arenas[bucket_id].get_buffer_byte_size())), "failed to bind storage image descriptor buffer");
+        const u32 bucket_id = bucket_ids[(u8)DescriptorBufferType::StorageImage];
+        RX_CHECK(_descriptor_arenas[(u8)DescriptorBufferType::StorageImage].bind(_memory_pool.allocate(bucket_id, _descriptor_arenas[bucket_id].get_buffer_byte_size())), "failed to bind storage image descriptor buffer");
       }
 
       _descriptor_offset_alignment = descriptor_buffer_offset;
 
       return true;
     }
+
+    const b8 DescriptorPool::get_descriptor(const vk::Image& image, const gpu::ImageType type, VkSampler sampler, const vk::DescriptorAllocation allocation, void* dst) {
+      VkDescriptorImageInfo image_info = image.get_image_info(sampler);
+ 
+      RX_TRACE("getting descriptor type");
+      const VkDescriptorType descriptor_type = vk::get_descriptor_type(type);
+      RX_TRACEF("descriptor type = %u", descriptor_type);
+      VkDescriptorGetInfoEXT get_info{};
+      get_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
+      get_info.type = descriptor_type;
+      switch(descriptor_type) {
+        case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+          get_info.data.pCombinedImageSampler = &image_info;
+          break;
+        case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+          get_info.data.pStorageImage = &image_info;
+          break;
+        default:
+          RX_ERROR("incorrect descriptor type found in get_descriptor(const BufferHandle, const gpu::BufferType, const vk::DescriptorAllocation)");
+        break;
+      }
+ 
+      RX_TRACE("vkGetDescriptorEXT");
+      _context->get_device().get_device_function_table()
+        .vkGetDescriptorEXT
+          ( _context->get_device().get_device()
+          , &get_info
+          , allocation.size
+          , (void*)((u8*)dst)
+          );
+  
+      return true;
+    }
+      
 
     const b8 DescriptorPool::get_descriptor(const vk::Buffer& buffer, const gpu::BufferType type, const vk::DescriptorAllocation allocation, void* dst) {
       VkDescriptorAddressInfoEXT address_info
@@ -342,8 +417,10 @@ namespace roxi {
         , buffer.get_size()
         , VK_FORMAT_UNDEFINED
         };
-  
+ 
+      RX_TRACE("getting descriptor type");
       const VkDescriptorType descriptor_type = vk::get_descriptor_type(type);
+      RX_TRACEF("descriptor type = %u", descriptor_type);
       VkDescriptorGetInfoEXT get_info{};
       get_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT;
       get_info.type = descriptor_type;
@@ -355,16 +432,17 @@ namespace roxi {
           get_info.data.pStorageBuffer = &address_info;
           break;
         default:
-          LOG("incorrect descriptor type found in get_descriptor(const BufferHandle, const gpu::BufferType, const vk::DescriptorAllocation)", Error);
+          RX_ERROR("incorrect descriptor type found in get_descriptor(const BufferHandle, const gpu::BufferType, const vk::DescriptorAllocation)");
         break;
       }
-  
+ 
+      RX_TRACE("vkGetDescriptorEXT");
       _context->get_device().get_device_function_table()
         .vkGetDescriptorEXT
           ( _context->get_device().get_device()
           , &get_info
           , allocation.size
-          , (void*)((u8*)dst + allocation.offset)
+          , (void*)((u8*)dst)
           );
   
       return true;
