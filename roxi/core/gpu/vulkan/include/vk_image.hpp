@@ -58,7 +58,7 @@ namespace roxi {
       static const VkFormat _s_flags[] = 
         { VK_FORMAT_R32G32B32A32_SFLOAT
         , VK_FORMAT_UNDEFINED
-        , VK_FORMAT_R32G32B32A32_SFLOAT
+        , VK_FORMAT_B8G8R8A8_SRGB
         , VK_FORMAT_R32_SFLOAT
         , VK_FORMAT_UNDEFINED
         , VK_FORMAT_UNDEFINED
@@ -120,8 +120,11 @@ namespace roxi {
       type value;
     };
 
+    class ResourcePool;
+
     class Image {
     private:
+      friend class ResourcePool;
       Context* _context = nullptr;
       VkImage _image = VK_NULL_HANDLE;
       VkExtent3D _image_extent{};

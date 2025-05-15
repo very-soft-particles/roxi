@@ -17,7 +17,218 @@
 #include "rx_resource_manager.hpp"
 
 namespace roxi {
- 
+  b8 TestRenderer::init(GPUDevice* device, const GPUDevice::QueueHandle handle) {
+    RX_TRACE("initializing renderer");
+    Renderer::init(device, handle);
+
+    _render_frame_count = get_swapchain_image_count();
+    RX_TRACE("creating commands");
+    RX_CHECK(create_commands(_render_frame_count)
+      , "failed to create commands in TestRenderer");
+    struct VertexUBO {
+      alignas(16)
+        glm::vec3 vertex_positions[3];
+    };
+
+    RX_TRACE("setting vertex ubo data");
+    VertexUBO ubo_data{};
+    ubo_data.vertex_positions[0] = glm::vec3(-1.f, -1.f, -1.f);
+    ubo_data.vertex_positions[1] = glm::vec3(1.f, -1.f, -1.f);
+    ubo_data.vertex_positions[2] = glm::vec3(0.f, 1.f, -1.f);
+
+    vk::Extent<2> window_size = get_current_extent();
+    // acquire from swapchain on each frame
+    //  RX_TRACE("creating rendering frame infos");
+    //  gpu::ResourceInfo image_infos[RenderFrameCount];
+    //  for(u32 i = 0; i < RenderFrameCount; i++) {
+    //    image_infos[i].type = gpu::ResourceType::RenderTarget;
+    //    image_infos[i].image.width = window_size.value.width;
+    //    image_infos[i].image.height = window_size.value.height;
+    //    image_infos[i].image.depth = 1;
+    //  }
+
+    // [0] = ubo for vertices, [1] = param data
+    const u32 ubo_handle = 0;
+    const u32 param_handle = 1;
+    RX_TRACE("creating buffer infos");
+    gpu::ResourceInfo buffer_infos[2];
+    buffer_infos[ubo_handle].type = gpu::ResourceType::HostUniformBuffer;
+    buffer_infos[ubo_handle].buffer.size = sizeof(VertexUBO);
+    buffer_infos[param_handle].type = gpu::ResourceType::HostUniformBuffer;
+    buffer_infos[param_handle].buffer.size = sizeof(ubo::TestDrawParams);
+
+    RX_TRACE("creating resources");
+    RX_CHECK(create_resources(2, 0, buffer_infos, nullptr)
+      , "failed to create commands in TestRenderer");
+
+    const vk::Buffer& ubo = get_resource_pool().obtain_buffer(ubo_handle);
+
+    RX_TRACE("mapping host ubo");
+    void* ubo_ptr = ubo.map();
+    if(ubo_ptr == nullptr) {
+      RX_ERROR("ubo mapping returned nullptr");
+    }
+
+    RX_TRACE("copying data to mapped pointer");
+    MEM_COPY(ubo_ptr, &ubo_data, sizeof(VertexUBO));
+
+    RX_TRACE("unmapping host ubo");
+    ubo.unmap();
+
+    RX_TRACE("obtaining render target from resource pool to generate colour attachment info");
+    vk::RenderPassInfo render_pass_info{};
+    vk::AttachmentInfo& colour_attachment = *(render_pass_info.colour_attachments.push(1));
+    colour_attachment.format = vk::get_image_format(gpu::ImageType::RenderTarget);
+    colour_attachment.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    colour_attachment.load_op = RenderPassOperationType::Clear;
+
+    _render_pass_handle = 0;
+    _draw_pipeline_handle = 0;
+
+    vk::PipelineInfo pipeline_info{};
+    pipeline_info.type = vk::DispatchType::Draw;
+    pipeline_info.graphics.render_pass_id = _render_pass_handle;
+    pipeline_info.graphics.vertex_shader_name = "basic_shader.vert";
+    pipeline_info.graphics.fragment_shader_name = "basic_shader.frag";
+    pipeline_info.graphics.extent_x = window_size.value.width;
+    pipeline_info.graphics.extent_y = window_size.value.height;
+
+    RX_TRACE("creating pipelines");
+    RX_CHECK(create_pipelines(1, 1, &pipeline_info, &render_pass_info)
+      , "failed to create commands in TestRenderer");
+    RX_TRACEF("VkRenderPass in TestRenderer = %llu", PTR2INT(get_pipeline_pool().obtain_render_pass(_render_pass_handle).get_render_pass()));
+                                      
+    vk::FramebufferCreation framebuffer_creations[RoxiNumFrames];
+    RX_TRACEF("swapchain image count = %u", _render_frame_count);
+    for(u32 i = 0; i < _render_frame_count; i++) {
+      RX_TRACEF("creating framebuffer creation %u", i);
+      framebuffer_creations[i].reset()
+        .add_render_texture(get_swapchain_image_view(i))
+        .set_scaling(1.f, 1.f, true)
+        .set_render_pass(&(get_pipeline_pool().obtain_render_pass(_render_pass_handle)))
+        .set_extent(window_size.value.width, window_size.value.height);
+    }
+
+    RX_TRACE("creating framebuffers");
+    _framebuffer_handles_begin = create_framebuffers(_render_frame_count, framebuffer_creations);
+    RX_TRACE("creating descriptors");
+    RX_CHECK(create_descriptors(1, 0, 0, 0)
+      , "failed to create commands in TestRenderer");
+
+    RX_TRACE("allocating uniform descriptor");
+    vk::DescriptorAllocation ubo_descriptor = get_descriptor_pool().allocate(vk::DescriptorBufferType::Uniform, 1);
+
+    draw_params.vertex_buffer_id = ubo_descriptor.get_buffer_id();
+
+    RX_TRACE("allocating transfer buffer");
+
+    _copy_fence = device->create_fence();
+    _loader_handle = device->create_loader(handle);
+
+    GPUDevice::Loader loader = device->obtain_loader(_loader_handle);
+
+    GPUDevice::TransferAllocation transfer_allocation = loader.allocate(device, ubo_descriptor.size);
+
+    RX_TRACEF("transfer data: ptr = %llx, offset = %u", PTR2INT(transfer_allocation.mapped_pointer), transfer_allocation.offset);
+
+    void* transfer_ptr = (void*)((u8*)transfer_allocation.get_allocation_at_offset());
+    RX_CHECK(transfer_allocation.mapped_pointer != nullptr, "failed to allocate descriptor data for vertex ubo in TestRenderer");
+
+    RX_TRACE("getting descriptor");
+    RX_CHECK(get_descriptor_pool().get_descriptor(ubo, gpu::BufferType::HostUniformBuffer, ubo_descriptor,
+          (u8*)transfer_ptr)
+        , "failed to get descriptor for TestDrawParams in TestRenderer::init()");
+
+    RX_TRACE("getting ubo descriptor buffer");
+    const vk::Buffer& ubo_descriptor_buffer = get_descriptor_pool().get_descriptor_buffer(vk::DescriptorBufferType::Uniform);
+
+    RX_TRACE("loader.transfer");
+    loader.transfer(device);
+
+    VkBufferCopy copy_info{};
+    copy_info.dstOffset = ubo_descriptor.offset;
+    copy_info.srcOffset = transfer_allocation.offset;
+    copy_info.size = ubo_descriptor.size;
+
+    RX_TRACE("recording copy commands");
+    vk::CommandBuffer copy_descriptors_cmd = get_command_pool(0).obtain_primary_command_buffer();
+    copy_descriptors_cmd
+      .begin()
+      .record_copy_buffer(*transfer_allocation.transfer_buffer, get_descriptor_pool().get_descriptor_buffer(vk::DescriptorBufferType::Uniform), 1, &copy_info)
+      .end();
+
+    RX_TRACE("submitting copy");
+    submit_immediate(copy_descriptors_cmd, loader.get_signal_semaphore_handle(), _copy_fence);
+
+    RX_TRACE("waiting for fence");
+    device->wait_for_fence(_copy_fence);
+
+    get_command_pool(0).reset();
+
+    RX_TRACE("exiting TestRenderer::init()");
+    RX_END();
+  }
+
+
+  b8 TestRenderer::update(const frame::ID frame_id) {
+    RX_TRACEF("getting TestRenderer primary rendering command buffer for frame = %llu", frame_id);
+   
+    u32 render_image_index;
+    while(!acquire_next_swapchain_index(&render_image_index, frame_id)){
+      RX_TRACE("image not acquired, sleeping!");
+      RX_SLEEP_FOR(1000);
+    }
+
+    RX_TRACEF("current render image index = %u", render_image_index);
+    vk::CommandPool& command_pool = get_command_pool(frame_id);
+    wait_for_render(frame_id);
+    command_pool.reset();
+    vk::CommandBuffer command_buffer = command_pool.obtain_primary_command_buffer();
+
+    RX_TRACEF("recording rendering command buffer for frame = %llu", frame_id);
+
+//    VkImageMemoryBarrier2 image_conversion{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2};
+//    image_conversion.image = get_swapchain_image(render_image_index);
+//    image_conversion.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+//    image_conversion.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+//    image_conversion.srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+//    image_conversion.srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT;
+//    image_conversion.dstStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+//    image_conversion.dstAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT | VK_ACCESS_2_MEMORY_READ_BIT;
+//    image_conversion.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+//    image_conversion.subresourceRange.baseMipLevel = 0;
+//    image_conversion.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+//    image_conversion.subresourceRange.baseArrayLayer = 0;
+//    image_conversion.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+
+    command_buffer
+      .begin()
+      .begin_render_pass
+        ( get_pipeline_pool()
+            .obtain_render_pass(_render_pass_handle)
+          , get_current_extent().value.width
+          , get_current_extent().value.height
+          , obtain_framebuffer(_framebuffer_handles_begin + render_image_index)
+        )
+      .bind_pipeline(get_pipeline_pool().obtain_pipeline(_draw_pipeline_handle))
+      .bind_descriptor_pool(get_descriptor_pool())
+      .record_draw(3, 1)
+      .end_render_pass()
+//      .pipeline_barriers(0, 0, 1, 0, nullptr, &image_conversion)
+      .end();
+
+    RX_TRACEF("submitting rendering command buffer for frame = %llu", frame_id);
+    RX_CHECKF(submit(frame_id, command_buffer)
+      , "failed to submit command buffer for frame_id = %u"
+      , frame_id);
+
+    RX_CHECKF(present(frame_id, render_image_index)
+        , "failed to present image for frame_id = %u, and render image index = %u"
+        , frame_id, render_image_index);
+
+    RX_TRACEF("exiting TestRenderer update for frame = %llu", frame_id);
+    return true;
+  }
 //  const u32 ClusteredForwardRenderer::VerticesSize = sizeof(Vertex) * resource::vertex_count();
 //  const u32 ClusteredForwardRenderer::IndicesSize = sizeof(u32) * resource::vertex_index_count();
 //  const u32 ClusteredForwardRenderer::MeshesSize = sizeof(MeshData) * resource::mesh_count();

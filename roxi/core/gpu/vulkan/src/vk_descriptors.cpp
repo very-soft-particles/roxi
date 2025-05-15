@@ -307,7 +307,7 @@ namespace roxi {
         RX_TRACE("creating ubo descriptor arena");
         _descriptor_arenas[(u8)DescriptorBufferType::Uniform].init(context, DescriptorBufferType::Uniform, ubo_descriptor_size, uniform_layout_size, descriptor_buffer_offset, uniform_buffer_count);  
         RX_TRACE("registering ubo memory bucket");
-        bucket_ids[(u8)DescriptorBufferType::Uniform] = memory_builder.register_bucket(ubo_descriptor_size * uniform_buffer_count + descriptor_buffer_offset, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+        bucket_ids[(u8)DescriptorBufferType::Uniform] = memory_builder.register_bucket(uniform_layout_size + descriptor_buffer_offset, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
       } else {
         //_descriptor_arenas[(u8)DescriptorBufferType::Uniform].init(context,  DescriptorBufferType::Uniform);
         _descriptor_arenas[(u8)DescriptorBufferType::Uniform] = {};
@@ -317,7 +317,7 @@ namespace roxi {
         RX_TRACE("creating storage descriptor arena");
         _descriptor_arenas[(u8)DescriptorBufferType::Storage].init(context, DescriptorBufferType::Storage, storage_descriptor_size, storage_layout_size, descriptor_buffer_offset, storage_buffer_count);  
         RX_TRACE("registering storage memory bucket");
-        bucket_ids[(u8)DescriptorBufferType::Storage] = memory_builder.register_bucket(storage_descriptor_size * storage_buffer_count + descriptor_buffer_offset, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+        bucket_ids[(u8)DescriptorBufferType::Storage] = memory_builder.register_bucket(storage_layout_size + descriptor_buffer_offset, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
       } else {
         //_descriptor_arenas[(u8)DescriptorBufferType::Storage].init(context,  DescriptorBufferType::Storage);
         _descriptor_arenas[(u8)DescriptorBufferType::Storage] = {};
@@ -327,7 +327,7 @@ namespace roxi {
         RX_TRACE("creating ubo descriptor arena");
         _descriptor_arenas[(u8)DescriptorBufferType::CombinedImageSampler].init(context, DescriptorBufferType::CombinedImageSampler, texture_descriptor_size, texture_layout_size, descriptor_buffer_offset, texture_count);  
         RX_TRACE("registering ubo memory bucket");
-        bucket_ids[(u8)DescriptorBufferType::CombinedImageSampler] = memory_builder.register_bucket(texture_descriptor_size * texture_count + descriptor_buffer_offset, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+        bucket_ids[(u8)DescriptorBufferType::CombinedImageSampler] = memory_builder.register_bucket(texture_layout_size + descriptor_buffer_offset, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
       } else {
         //_descriptor_arenas[(u8)DescriptorBufferType::CombinedImageSampler].init(context,  DescriptorBufferType::CombinedImageSampler);
         _descriptor_arenas[(u8)DescriptorBufferType::CombinedImageSampler] = {};
@@ -337,7 +337,7 @@ namespace roxi {
         RX_TRACE("creating storage descriptor arena");
         _descriptor_arenas[(u8)DescriptorBufferType::StorageImage].init(context, DescriptorBufferType::StorageImage, image_descriptor_size, image_layout_size, descriptor_buffer_offset, storage_image_count);  
         RX_TRACE("registering storage memory bucket");
-        bucket_ids[(u8)DescriptorBufferType::StorageImage] = memory_builder.register_bucket(image_descriptor_size * storage_image_count + descriptor_buffer_offset, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+        bucket_ids[(u8)DescriptorBufferType::StorageImage] = memory_builder.register_bucket(image_layout_size + descriptor_buffer_offset, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
       } else {
         //_descriptor_arenas[(u8)DescriptorBufferType::StorageImage].init(context,  DescriptorBufferType::StorageImage);
         _descriptor_arenas[(u8)DescriptorBufferType::StorageImage] = {};

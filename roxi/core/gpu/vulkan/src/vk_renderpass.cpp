@@ -168,10 +168,7 @@ namespace roxi {
       return *this;
     }
 
-    VkFramebufferCreateInfo FramebufferCreation::get_create_info(ResourcePool& resource_pool) const {
-      Array<VkImageView> image_views{ALLOCATE(sizeof(VkImageView) * _num_render_targets + 1)};
-      image_views.clear();
-      VkImageView* const image_view_begin = image_views.push(_num_render_targets + 1);
+    VkFramebufferCreateInfo FramebufferCreation::get_create_info() const {
       VkFramebufferCreateInfo result{ VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO };
       result.pNext = nullptr;
       result.flags = 0;
@@ -180,18 +177,10 @@ namespace roxi {
       result.height = _height;
       result.layers = 1;
 
-      RX_TRACEF("getting image view count %u", _num_render_targets);
-      for(u32 i = 0; i < _num_render_targets; i++) {
-        RX_TRACEF("getting image view %u", i);
-        image_view_begin[i] = resource_pool.obtain_image(_output_textures[i]).get_image_view();
-      }
-      b8 depth_texture_avail = _depth_stencil_texture != ResourcePool::MaxResourceHandle;
-      if(depth_texture_avail) {
-        image_views[_num_render_targets] = resource_pool.obtain_image(_depth_stencil_texture).get_image_view();
-      }
+      b8 depth_texture_avail = _depth_stencil_texture != VK_NULL_HANDLE;
 
       result.attachmentCount = depth_texture_avail ? _num_render_targets + 1 : _num_render_targets;
-      result.pAttachments = image_views.get_buffer();
+      result.pAttachments = _output_textures;
 
       return result;
     }
@@ -424,7 +413,7 @@ b8 RenderPassBuilder::build(Context* context, RenderPass* render_pass) const {
     FramebufferCreation& FramebufferCreation::reset()
     {
         _num_render_targets = 0;
-        _depth_stencil_texture = ResourcePool::MaxResourceHandle;
+        _depth_stencil_texture = VK_NULL_HANDLE;
         _render_pass = nullptr;
     
         _resize = 0;
@@ -434,16 +423,16 @@ b8 RenderPassBuilder::build(Context* context, RenderPass* render_pass) const {
         return *this;
     }
     
-    FramebufferCreation& FramebufferCreation::add_render_texture( ResourcePool::ImageHandle texture )
+    FramebufferCreation& FramebufferCreation::add_render_texture( VkImageView image_view )
     {
-        _output_textures[ _num_render_targets++ ] = texture;
+        _output_textures[ _num_render_targets++ ] = image_view;
     
         return *this;
     }
     
-    FramebufferCreation& FramebufferCreation::set_depth_stencil_texture( ResourcePool::ImageHandle texture )
+    FramebufferCreation& FramebufferCreation::set_depth_stencil_texture( VkImageView image_view )
     {
-        _depth_stencil_texture = texture;
+        _depth_stencil_texture = image_view;
     
         return *this;
     }
@@ -464,9 +453,9 @@ b8 RenderPassBuilder::build(Context* context, RenderPass* render_pass) const {
         return *this;
     }
 
-    b8 Framebuffer::init(Context* context, const FramebufferCreation& creation, ResourcePool& resource_pool) {
+    b8 Framebuffer::init(Context* context, const FramebufferCreation& creation) {
       RX_TRACE("getting create info");
-      VkFramebufferCreateInfo info = creation.get_create_info(resource_pool);
+      VkFramebufferCreateInfo info = creation.get_create_info();
       RX_TRACE("vkCreateFramebuffer");
       VK_CHECK(context->get_device().get_device_function_table()
         .vkCreateFramebuffer(context->get_device().get_device()
@@ -476,9 +465,6 @@ b8 RenderPassBuilder::build(Context* context, RenderPass* render_pass) const {
           )
         , "failed to create vk frame buffer!");
 
-      if(info.attachmentCount > 0) {
-        FREE((void*)info.pAttachments);
-      }
       return true;
     }
 

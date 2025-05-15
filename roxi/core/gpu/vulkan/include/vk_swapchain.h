@@ -31,7 +31,7 @@ namespace roxi {
     private:
       VkSurfaceKHR _surface;
     public:
-      b8 init(Instance* instance, void* wnd);
+      b8 init(const Instance* instance, void* wnd);
 
       b8 terminate(Instance* instance);
 
@@ -52,7 +52,10 @@ namespace roxi {
 
     public:
 
-      b8 init(Instance* instance, Device* device, void* wnd, const VkSurfaceKHR surface);
+      b8 init(const Instance* instance, const Device* device, void* wnd, const VkSurfaceKHR surface);
+
+      // returns false if no image is available, use signal semaphore to synchronize writing to image
+      b8 acquire_next_image_index(const Device* device, u32* index_out, VkSemaphore signal_semaphore) const;
 
       const VkSwapchainKHR& get_swapchain() const {
         return _swapchain;
@@ -66,8 +69,12 @@ namespace roxi {
         return _current_extent;
       }
 
-      const VkImageView* get_attachments() const {
-        return _swapchain_image_views.get_buffer();
+      const VkImageView get_attachment(const u32 idx) const {
+        return _swapchain_image_views[idx];
+      }
+
+      const VkImage get_image(const u32 idx) const {
+        return _swapchain_images[idx];
       }
 
       const u32 get_attachment_count() const {
@@ -76,10 +83,6 @@ namespace roxi {
 
       const VkFormat get_swapchain_format() const {
         return _swapchain_format;
-      }
-
-      b8 init(Device* device) {
-        return true;
       }
 
       b8 terminate(Device* device) {

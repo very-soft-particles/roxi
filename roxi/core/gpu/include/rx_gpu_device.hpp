@@ -19,6 +19,7 @@
 #include "rx_vocab.h"
 #include "vk_pipeline.hpp"
 #include "vk_renderpass.hpp"
+#include "vk_swapchain.h"
 #include "window.h"
 #include "vk_command.hpp"
 #include "vk_context.h"
@@ -164,7 +165,6 @@ namespace roxi {
     };
 
   private:
-
     class LoaderManager {
     private:
       SizedStackArray<Loader, GPUDeviceSettings::MaxLoaders> _loaders;
@@ -185,10 +185,16 @@ namespace roxi {
 
     b8 init(void* window, const u32 system_count, const vk::QueueType* system_queue_types);
 
+    b8 acquire_next_swapchain_index(u32* out_index, const SemaphoreHandle signal_semaphore);
+
     const LoaderManager::LoaderHandle create_loader(const QueueHandle queue_handle);
     const Loader& obtain_loader(const LoaderManager::LoaderHandle handle);
 
-    b8 create_framebuffers(const u32 count, vk::Framebuffer* const framebuffers, const vk::FramebufferCreation* const creations, const ResourcePoolHandle resource_pool_handle);
+    b8 create_framebuffers(const u32 count, vk::Framebuffer* const framebuffers, const vk::FramebufferCreation* const creations);
+
+    const u32 get_timeline_count(const QueueHandle handle) {
+      return _timelines[handle].get_count(&_context);
+    }
 
     const PipelinePoolHandle create_pipeline_pool(const DescriptorPoolHandle descriptor_pool_handle, const u32 pipeline_count, const u32 render_pass_count, vk::PipelineInfo* pipeline_infos, vk::RenderPassInfo* render_pass_infos);
 
@@ -259,7 +265,13 @@ namespace roxi {
 
     b8 queue_submit(const QueueHandle queue, const vk::CommandBuffer buffer_to_submit, const u32 wait_semaphore_count, const SemaphoreHandle* wait_semaphores, const u32 signal_semaphore_count, const SemaphoreHandle* signal_semaphores, FenceHandle signal_fence = lofi::index_type_max<FenceHandle>::value);
 
-    b8 queue_frame_submit(const frame::ID frame_id, const QueueHandle queue, const vk::CommandBuffer buffer_to_submit);
+    b8 queue_frame_submit(const frame::ID frame_id, const QueueHandle queue, const vk::CommandBuffer buffer_to_submit, const SemaphoreHandle wait_semaphore = lofi::index_type_max<SemaphoreHandle>::value, const SemaphoreHandle signal_semaphore = lofi::index_type_max<SemaphoreHandle>::value, const FenceHandle signal_fence = lofi::index_type_max<FenceHandle>::value);
+
+    b8 queue_present(const QueueHandle queue, const SemaphoreHandle wait_semaphore, const u32 image_index);
+
+    const vk::Swapchain& get_swapchain() {
+      return _context.get_swapchain();
+    }
 
     b8 terminate();
 
@@ -294,7 +306,6 @@ namespace roxi {
     // semaphores
     Array<vk::Semaphore>                                                        _semaphore_pool;
 
-
     u32 _current_width = 0;
     u32 _current_height = 0;
   };
@@ -307,6 +318,9 @@ namespace roxi {
     GPUDevice::CommandPoolHandle _command_pool;
     GPUDevice::PipelinePoolHandle _pipeline_pool;
     GPUDevice::DescriptorPoolHandle _descriptor_pool;
+    GPUDevice::SemaphoreHandle _image_available_semaphores[RoxiNumFrames];
+    GPUDevice::SemaphoreHandle _render_semaphores[RoxiNumFrames];
+    GPUDevice::FenceHandle _render_fences[RoxiNumFrames];
 
   public:
     static constexpr vk::QueueType QueueType = vk::QueueType::Render;
@@ -315,6 +329,7 @@ namespace roxi {
     using framebuffer_pool_t = Array<vk::Framebuffer>;
     using FramebufferHandle = typename framebuffer_pool_t::index_t;
 
+    u32 _render_frame_count = 2;
     framebuffer_pool_t _framebuffers;
 
     b8 init(GPUDevice* device, const GPUDevice::QueueHandle queue_handle);
@@ -323,6 +338,11 @@ namespace roxi {
       _resource_pool = _device->create_resource_pool(buffer_count, image_count, buffer_infos, image_infos);
       RX_CHECK(_resource_pool != lofi::index_type_max<GPUDevice::ResourcePoolHandle>::value
         , "failed to create resource pool");
+      for(u32 i = 0; i < _render_frame_count; i++) {
+        _image_available_semaphores[i] = _device->create_semaphore();
+        _render_semaphores[i] = _device->create_semaphore();
+        _render_fences[i] = _device->create_fence();
+      }
       RX_END();
     }
 
@@ -350,7 +370,7 @@ namespace roxi {
 
     const FramebufferHandle create_framebuffers(const u32 count, const vk::FramebufferCreation* const creations) {
       const FramebufferHandle result = _framebuffers.get_size();
-      RX_CHECKF(_device->create_framebuffers(count, _framebuffers.push(count), creations, _resource_pool)
+      RX_CHECKF(_device->create_framebuffers(count, _framebuffers.push(count), creations)
         , "Renderer failed to create %u framebuffers", count);
       RX_END_RESULT(result);
     }
@@ -368,15 +388,22 @@ namespace roxi {
     }
 
     vk::CommandPool& get_command_pool(const u32 frame_id) {
-      RX_END_RESULT(_device->obtain_command_pool(_command_pool + frame_id));
+      RX_END_RESULT(_device->obtain_command_pool(_command_pool + (frame_id % _render_frame_count)));
     }
 
     vk::DescriptorPool& get_descriptor_pool() {
       RX_END_RESULT(_device->obtain_descriptor_pool(_descriptor_pool));
     }
 
+    void wait_for_render(const frame::ID id) {
+      const u32 _render_frame_id  = id % _render_frame_count;
+      _device->wait_for_fence(_render_fences[_render_frame_id]);
+      _device->reset_fence(_render_fences[_render_frame_id]);
+    }
+
     b8 submit(const frame::ID id, const vk::CommandBuffer command_buffer) {
-      RX_CHECKF(_device->queue_frame_submit(id, _queue_handle, command_buffer)
+      const u32 _render_frame_id  = id % _render_frame_count;
+      RX_CHECKF(_device->queue_frame_submit(id, _queue_handle, command_buffer, _image_available_semaphores[_render_frame_id], _render_semaphores[_render_frame_id], _render_fences[_render_frame_id])
         , "Renderer failed to submit frame::ID id = %u"
         , id
         );
@@ -387,6 +414,34 @@ namespace roxi {
       RX_CHECK(_device->queue_submit_immediate(_queue_handle, buffer, signal_fence, 1, &wait_semaphore)
         , "Renderer failed to immediate submit");
       RX_END();
+    }
+
+    b8 present(const frame::ID id, const u32 image_index) {
+      RX_CHECKF(_device->queue_present(_queue_handle, _render_semaphores[id % _render_frame_count], image_index)
+        , "failed to present image index = %u"
+        , image_index);
+
+      RX_END();
+    }
+
+    const u64 get_timeline_value() {
+      return _device->get_timeline_count(_queue_handle);
+    }
+
+    const u32 get_swapchain_image_count() {
+      return _device->get_swapchain().get_attachment_count();
+    }
+
+    const VkImageView get_swapchain_image_view(const u32 index) {
+      return _device->get_swapchain().get_attachment(index);
+    }
+
+    const VkImage get_swapchain_image(const u32 index) {
+      return _device->get_swapchain().get_image(index);
+    }
+  public:
+    const b8 acquire_next_swapchain_index(u32* index_out, const u32 index_in) {
+      return _device->acquire_next_swapchain_index(index_out, _image_available_semaphores[index_in % _render_frame_count]);
     }
 
   protected:

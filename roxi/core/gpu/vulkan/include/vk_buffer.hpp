@@ -57,8 +57,11 @@ namespace roxi {
     static constexpr u32 s_max_staging_buffers =  64;
     static constexpr u32 s_max_buffers = s_max_staging_buffers + s_max_storage_buffers + s_max_uniform_buffers;
 
+    class ResourcePool;
+
     class Buffer {
     private:
+      friend class ResourcePool;
       VkBuffer _buffer = VK_NULL_HANDLE;
       VkDeviceSize _buffer_size = 0;
       gpu::BufferType _type;

@@ -111,7 +111,7 @@ namespace roxi {
       }
 
       CommandBuffer& begin_render_pass(const RenderPass& render_pass, const u32 width, const u32 height, const Framebuffer& framebuffer, VkSubpassContents subpass_contents = VK_SUBPASS_CONTENTS_INLINE) {
-        VkClearValue clear_value {1.f, 0.f, 0.f, 1.f};
+        VkClearValue clear_value {0.f, 0.f, 1.f, 1.f};
         VkRenderPassBeginInfo begin_info{};
         begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
         begin_info.pNext = nullptr;
@@ -144,11 +144,7 @@ namespace roxi {
         VkCommandBufferBeginInfo begin_info{};
         begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         begin_info.pNext = nullptr;
-        if (inheritance_info == nullptr) {
-          begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-        } else {
-          begin_info.flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
-        }
+        begin_info.flags = inheritance_info == nullptr ? VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT : VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
         begin_info.pInheritanceInfo = inheritance_info;
         RX_TRACE("vkBeginCommandBuffer");
         VK_ASSERT(_context->get_device().get_device_function_table()
@@ -226,6 +222,7 @@ namespace roxi {
       }
 
       CommandBuffer& pipeline_barriers(const VkDependencyFlags dependency_flags = 0, const u32 buffer_count = 0, const u32 image_count = 0, const u32 barrier_count = 0, VkBufferMemoryBarrier2* buffer_barriers = nullptr, VkImageMemoryBarrier2* image_barriers = nullptr, VkMemoryBarrier2* memory_barriers = nullptr) {
+
         VkDependencyInfo dependency_info{};
         dependency_info.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
         dependency_info.pNext = nullptr;
@@ -236,6 +233,7 @@ namespace roxi {
         dependency_info.pBufferMemoryBarriers = buffer_barriers;
         dependency_info.pImageMemoryBarriers = image_barriers;
         dependency_info.pMemoryBarriers = memory_barriers;
+
         RX_TRACE("vkCmdPipelineBarrier2");
         _context->get_device().get_device_function_table()
           .vkCmdPipelineBarrier2(_buffer, &dependency_info);
@@ -273,7 +271,7 @@ namespace roxi {
 
       CommandBuffer& record_draw(u32 vertex_count, u32 instance_count, u32 first_vertex = 0, u32 first_instance = 0) {
 
-        RX_TRACE("vkCmdDraw");
+        RX_TRACEF("vkCmdDraw with %u vertices and %u instances", vertex_count, instance_count);
         _context->get_device().get_device_function_table()
           .vkCmdDraw(_buffer, vertex_count, instance_count, first_vertex, first_instance);
         return *this;

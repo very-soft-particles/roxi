@@ -2,8 +2,8 @@
 
 layout(location = 0) out vec4 frag_colour;
 
+const vec3 COLOUR = vec3(1.f, 0.f, 0.f);
 
 void main() {
-  const vec3 COLOUR = vec3(0.2f, 0.4f, 0.0f);
-  frag_colour = vec4(COLOUR, 1);
+  frag_colour = vec4(COLOUR, 1.f);
 }

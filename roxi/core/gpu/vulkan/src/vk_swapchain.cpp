@@ -20,7 +20,7 @@ namespace roxi {
  
   namespace vk {
 
-    b8 Surface::init(Instance* instance, void* wnd) {
+    b8 Surface::init(const Instance* instance, void* wnd) {
 #if OS_WINDOWS
       RX_TRACE("OS_WINDOWS detected in surface initialization");
       win::Window* p_wnd = (win::Window*)wnd;
@@ -52,7 +52,7 @@ namespace roxi {
       return true;
     }
     
-    b8 Swapchain::init(Instance* instance, Device* device, void* wnd, const VkSurfaceKHR surface) {
+    b8 Swapchain::init(const Instance* instance, const Device* device, void* wnd, const VkSurfaceKHR surface) {
       _presentation_surface = surface;
 
       VkSurfaceCapabilities2KHR surface_capabilities{};
@@ -118,69 +118,83 @@ namespace roxi {
         surface_capabilities.surfaceCapabilities.currentTransform : VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
       create_info.imageArrayLayers = 1;
 #if OS_WINDOWS
-        win::Window* p_wnd = (win::Window*)wnd;
-        create_info.imageExtent = (VkExtent2D)p_wnd->get_extents();
+      win::Window* p_wnd = (win::Window*)wnd;
+      create_info.imageExtent = (VkExtent2D)p_wnd->get_extents();
 #endif
-        
-        VkFormat format = chosen_format.surfaceFormat.format;
-        create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-        create_info.imageColorSpace = chosen_format.surfaceFormat.colorSpace;
-        create_info.imageFormat = chosen_format.surfaceFormat.format;
-        create_info.oldSwapchain = _swapchain;
-
-        VK_CHECK(device->get_device_function_table()
-          .vkCreateSwapchainKHR(device->get_device()
-              , &create_info, CALLBACKS(), &_swapchain)
-          , "failed to create swapchain khr");
-        _current_extent = create_info.imageExtent;
-        _swapchain_format = format;
-
-        u32 image_count = 0;
-        device->get_device_function_table()
-          .vkGetSwapchainImagesKHR(device->get_device()
-              , _swapchain, &image_count, nullptr);
-        if(image_count == 0) {
-          LOG("failed to get any images from swapchain", Fatal);
-          return false;
-        }
-        device->get_device_function_table()
-          .vkGetSwapchainImagesKHR(device->get_device()
-            , _swapchain
-            , &image_count
-            , _swapchain_images.push(image_count));
-
-        VkImageViewCreateInfo image_view_create_info{};
-        image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        image_view_create_info.pNext = nullptr;
-        image_view_create_info.flags = 0;
-        image_view_create_info.format = chosen_format.surfaceFormat.format;
-        image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        image_view_create_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-        image_view_create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-        image_view_create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-        image_view_create_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-        image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        image_view_create_info.subresourceRange.baseArrayLayer = 0;
-        image_view_create_info.subresourceRange.baseMipLevel = 0;
-        image_view_create_info.subresourceRange.layerCount = 1;
-        image_view_create_info.subresourceRange.levelCount = 1;
-        
-        for(size_t i = 0; i < image_count; i++) {
-          image_view_create_info.image = _swapchain_images[i];
-          if(device->get_device_function_table()
-            .vkCreateImageView(device->get_device()
-                , &image_view_create_info, CALLBACKS(), _swapchain_image_views.push(1))
-            != VK_SUCCESS) {
-            LOG("failed to create swap chain image view", Fatal);
-            return false;
-          }
-        }
-
-        return true;
       
+      VkFormat format = chosen_format.surfaceFormat.format;
+      create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+      create_info.imageColorSpace = chosen_format.surfaceFormat.colorSpace;
+      create_info.imageFormat = chosen_format.surfaceFormat.format;
+      create_info.oldSwapchain = _swapchain;
+
+      VK_CHECK(device->get_device_function_table()
+        .vkCreateSwapchainKHR(device->get_device()
+            , &create_info, CALLBACKS(), &_swapchain)
+        , "failed to create swapchain khr");
+      _current_extent = create_info.imageExtent;
+      _swapchain_format = format;
+
+      u32 image_count = 0;
+      device->get_device_function_table()
+        .vkGetSwapchainImagesKHR(device->get_device()
+            , _swapchain, &image_count, nullptr);
+      RX_CHECK(image_count != 0
+        , "failed to get any images from swapchain"
+      );
+      device->get_device_function_table()
+        .vkGetSwapchainImagesKHR(device->get_device()
+          , _swapchain
+          , &image_count
+          , _swapchain_images.push(image_count));
+
+      VkImageViewCreateInfo image_view_create_info{};
+      image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+      image_view_create_info.pNext = nullptr;
+      image_view_create_info.flags = 0;
+      image_view_create_info.format = chosen_format.surfaceFormat.format;
+      image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+      image_view_create_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+      image_view_create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+      image_view_create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+      image_view_create_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+      image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+      image_view_create_info.subresourceRange.baseArrayLayer = 0;
+      image_view_create_info.subresourceRange.baseMipLevel = 0;
+      image_view_create_info.subresourceRange.layerCount = 1;
+      image_view_create_info.subresourceRange.levelCount = 1;
+      
+      for(size_t i = 0; i < image_count; i++) {
+        image_view_create_info.image = _swapchain_images[i];
+        VK_CHECK(device->get_device_function_table()
+          .vkCreateImageView(device->get_device()
+            , &image_view_create_info, CALLBACKS(), _swapchain_image_views.push(1))
+          , "failed to create swap chain image view"
+        );
+      }
 
       return true;
     }
+
+    b8 Swapchain::acquire_next_image_index(const Device* device, u32* index_out, VkSemaphore signal_semaphore) const {
+      VkResult result = device->get_device_function_table()
+          .vkAcquireNextImageKHR(device->get_device()
+            , _swapchain
+            , 0
+            , signal_semaphore
+            , VK_NULL_HANDLE
+            , index_out
+            );
+      if(result == VK_SUCCESS) {
+        return true;
+      } else if(result == VK_TIMEOUT) {
+        return false;
+      } else {
+        RX_ERRORF("failed to acquire swapchain image with VkResult = %u", result);
+        return false;
+      }
+    }
+      
 
   }		// -----  end of namespace vk  ----- 
 

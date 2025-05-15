@@ -134,8 +134,8 @@ namespace roxi {
         u16                             _num_render_targets  = 0;
         const RenderPass*                  _render_pass;
     
-        ResourcePool::ImageHandle                   _output_textures[ s_max_image_outputs ];
-        ResourcePool::ImageHandle              _depth_stencil_texture = { ResourcePool::MaxResourceHandle };
+        VkImageView                   _output_textures[ s_max_image_outputs ];
+        VkImageView              _depth_stencil_texture = { VK_NULL_HANDLE };
     
         u16                             _width       = 0;
         u16                             _height      = 0;
@@ -146,13 +146,13 @@ namespace roxi {
 
     public:
         FramebufferCreation&            reset();
-        FramebufferCreation&            add_render_texture( ResourcePool::ImageHandle texture );
-        FramebufferCreation&            set_depth_stencil_texture( ResourcePool::ImageHandle texture );
+        FramebufferCreation&            add_render_texture( VkImageView image_view );
+        FramebufferCreation&            set_depth_stencil_texture( VkImageView image_view );
         FramebufferCreation&            set_scaling( f32 scale_x, f32 scale_y, u8 resize );
         FramebufferCreation&            set_extent( u16 width, u16 height );
         FramebufferCreation&            set_render_pass( const RenderPass* render_pass );
 
-        VkFramebufferCreateInfo get_create_info(ResourcePool& resource_pool) const;
+        VkFramebufferCreateInfo get_create_info() const;
     
     }; // struct RenderPassCreation
     
@@ -177,7 +177,7 @@ namespace roxi {
       u32                             _num_color_attachments;
 
     public:
-      b8 init(Context* context, const FramebufferCreation& creation, ResourcePool& resource_pool);
+      b8 init(Context* context, const FramebufferCreation& creation);
 
       const VkFramebuffer& get_framebuffer() const {
         return _framebuffer;

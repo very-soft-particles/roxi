@@ -18,6 +18,7 @@
 #include "vk_allocator.hpp"
 #include "vk_buffer.hpp"
 #include "vk_image.hpp"
+#include "vk_swapchain.h"
 #include <vulkan/vulkan_core.h>
 
 #define VK_RESOURCE_TYPES(X) VK_BUFFER_TYPES(X) VK_IMAGE_TYPES(X)
@@ -289,7 +290,7 @@ namespace roxi {
   namespace vk {
 
     static constexpr VkFormat DepthFormat = VK_FORMAT_D32_SFLOAT;
-    static constexpr VkFormat RenderTargetFormat = VK_FORMAT_R8G8B8A8_UINT;
+    static constexpr VkFormat RenderTargetFormat = VK_FORMAT_B8G8R8A8_SRGB;
 
     class ResourcePoolBuilder;
 

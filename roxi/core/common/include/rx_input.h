@@ -18,6 +18,9 @@
 #include "rx_time.h"
 
 namespace roxi {
+  static constexpr u8 EscapeKey = 0x1b;
+  static constexpr u8 SpaceKey = 0x20;
+
   namespace input {
     struct Position {
       i16 x = MAX_u16;

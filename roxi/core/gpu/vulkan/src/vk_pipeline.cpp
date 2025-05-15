@@ -74,6 +74,8 @@ namespace roxi {
       _shader_stages.clear();
       _vertex_attribute_description.clear();
       _vertex_binding_description.clear();
+      _shadow_pass = false;
+      _discard_fragments = false;
       return true;
     }
 
@@ -202,11 +204,13 @@ namespace roxi {
 
       _rasterizer = {};
       _rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+      RX_TRACEF("discard fragments? %u", _discard_fragments);
       _rasterizer.rasterizerDiscardEnable = _discard_fragments ? VK_TRUE : VK_FALSE;
       _rasterizer.depthClampEnable = VK_FALSE;
       _rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
       _rasterizer.lineWidth = 1.f;
-      _rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+      //_rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+      _rasterizer.cullMode = VK_CULL_MODE_NONE;
       _rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
       _rasterizer.depthBiasEnable = _shadow_pass ? VK_TRUE : VK_FALSE;
 
@@ -332,6 +336,7 @@ namespace roxi {
 
     PipelineCreation<PipelineType::Graphics> PipelinePoolBuilder::add_graphics_pipeline(const PipelineInfo info) {
       PipelineCreation<PipelineType::Graphics> creation{};
+      creation.init();
 
       creation.add_viewport(0.f, 0.f, (float)info.graphics.extent_x, (float)info.graphics.extent_y, 0.f, 1.f);
       creation.add_scissor({0,0}, {info.graphics.extent_x, info.graphics.extent_y});
@@ -706,9 +711,6 @@ namespace roxi {
       FREE(_render_passes.get_buffer());
       return true;
     }
-
-
-
 
   }		// -----  end of namespace vk  ----- 
 }		// -----  end of namespace roxi  ----- 

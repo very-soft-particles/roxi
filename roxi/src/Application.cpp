@@ -19,6 +19,7 @@
 #include "message_handler.h"
 #include "rx_frame_manager.hpp"
 #include "rx_gpu_device.hpp"
+#include "rx_input.h"
 #include "rx_thread_pool.hpp"
 #include "rx_vocab.h"
 #include "vk_device.h"
@@ -27,6 +28,7 @@
 namespace roxi {
 
   static u64 start_times[RoxiNumFrames];
+  static b8 to_quit = false;
 
   void Application::handle_input(const u64 frame_id) noexcept {
     u32 count = 0;
@@ -39,6 +41,9 @@ namespace roxi {
         start_times[frame_index] = current.time;
       }
       // dispatch on message here
+      if(current.code == roxi::EscapeKey) {
+        to_quit = true;
+      }
       RX_TRACEF("input index = %u\n\tframe_id = %llu\n\tinput time = %llu\n\tinput code = %u\n\tinput type = %u", i, frame_id, current.time, current.code, current.event);
     }
   }
@@ -248,18 +253,22 @@ namespace roxi {
     b8 br = false;
     b8 loop = true;
     const auto start_time = Time::now();
+    frame::ID frame_id = 0;
     do {
+      handle_input(frame_id);
+      br = to_quit;
       for(u32 i = 0; i < system_count; i++) {
-        if(!_systems[i]->get_update_job(&counter, 0, 1).run()) {
+        if(!_systems[i]->get_update_job(&counter, frame_id, frame_id + 1).run()) {
           RX_ERRORF("system %u failed to update", i);
           br = true;
         }
+        frame_id++;
       }
       if(br) {
         break;
       }
     }
-    while((loop = win::PROCESS()) && counter.get_count() < 1);
+    while((loop = win::PROCESS()) && counter.get_count() < 600);
 //      {
 //        //using namespace std::chrono_literals;
 //        //std::this_thread::sleep_for(10ms);
@@ -325,12 +334,12 @@ namespace roxi {
     //}
 
     for(u32 i = 0; i < system_count; i++) {
-      RX_CHECKF(_systems[i]->get_terminate_job(&counter, 0, 1)
+      RX_CHECKF(_systems[i]->get_terminate_job(&counter, 0, 1).run()
           , "failed to terminate system %u"
           , i);
     }
 
-    RX_THREAD_POOL->terminate();
+    //RX_THREAD_POOL->terminate();
     return true;
   }
   

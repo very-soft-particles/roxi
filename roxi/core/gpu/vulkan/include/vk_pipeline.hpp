@@ -129,7 +129,6 @@ namespace roxi {
       VkPipelineMultisampleStateCreateInfo _multisampling;
       VkPipelineLayout _pipeline_layout;
       VkPipelineDepthStencilStateCreateInfo _depth_stencil;
-      VkFormat _color_attachment_format;
       StackArray<VkViewport> _viewports;
       StackArray<VkRect2D> _scissors;
       VkRenderPass _render_pass = VK_NULL_HANDLE;
@@ -155,7 +154,7 @@ namespace roxi {
 
       b8 add_vertex_binding(u32 binding = 0, u32 stride = 0, VkVertexInputRate input_rate = VK_VERTEX_INPUT_RATE_VERTEX);
 
-      b8 add_vertex_attribute(u32 binding = 0, u32 location = 0, VkFormat format = VK_FORMAT_R32G32B32_SFLOAT, u32 offset = 0);
+      b8 add_vertex_attribute(u32 binding = 0, u32 location = 0, VkFormat format = VK_FORMAT_B8G8R8A8_SRGB, u32 offset = 0);
 
       b8 set_shadow_pass(const b8 set_bool);
       b8 set_dispatch_type(const DispatchType type);

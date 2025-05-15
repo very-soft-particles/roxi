@@ -79,9 +79,9 @@ namespace roxi {
     RX_TRACE("allocating gpu memory");
     u8* buffer = (u8*)ALLOCATE(
         sizeof(vk::PipelinePool) * (system_count + 1)
-      + sizeof(vk::CommandPool) * (system_count + 1)
+      + sizeof(vk::CommandPool) * ((system_count + 1) * RoxiNumFrames)
       + sizeof(vk::ResourcePool) * (system_count + 1)
-      + sizeof(vk::DescriptorPool) * (system_count + 1)
+      + sizeof(vk::DescriptorPool) * ((system_count + 1) * RoxiNumFrames)
       + sizeof(VkQueue) * (system_count + 1)
       + sizeof(vk::TimelineSemaphore) * (system_count + 1)
       + sizeof(vk::Fence) * GPUDeviceSettings::MaxFenceCount
@@ -151,7 +151,7 @@ namespace roxi {
     _pipeline_pools.clear();
 
     _command_pools.move_ptr(buffer);
-    buffer += sizeof(vk::CommandPool) * (system_count + 1);
+    buffer += sizeof(vk::CommandPool) * ((system_count + 1) * RoxiNumFrames);
     _command_pools.clear();
 
     _resource_pools.move_ptr(buffer);
@@ -159,7 +159,7 @@ namespace roxi {
     _resource_pools.clear();
 
     _descriptor_pools.move_ptr(buffer);
-    buffer += sizeof(vk::DescriptorPool) * (system_count + 1);
+    buffer += sizeof(vk::DescriptorPool) * ((system_count + 1) * RoxiNumFrames);
     _descriptor_pools.clear();
 
     _queue_pool.move_ptr(buffer);
@@ -201,11 +201,11 @@ namespace roxi {
     return {&device->obtain_resource_pool(_resource_pool_handle).obtain_buffer(TransferBufferHandle), _staging_buffer_mapped_pointer, offset};
   }
 
-  b8 GPUDevice::create_framebuffers(const u32 count, vk::Framebuffer* const framebuffers, const vk::FramebufferCreation* const creations, const ResourcePoolHandle resource_pool_handle) {
+  b8 GPUDevice::create_framebuffers(const u32 count, vk::Framebuffer* const framebuffers, const vk::FramebufferCreation* const creations) {
     for(u32 i = 0; i < count; i++) {
       RX_TRACEF("creating framebuffer %u", i);
-      RX_CHECKF(framebuffers[i].init(&_context, creations[i], obtain_resource_pool(resource_pool_handle))
-          , "failed to create framebuffer id %u with resource pool %u", i, resource_pool_handle);
+      RX_CHECKF(framebuffers[i].init(&_context, creations[i])
+          , "failed to create framebuffer id %u", i);
     }
 
     RX_END();
@@ -515,21 +515,63 @@ namespace roxi {
     RX_END();
   }
 
+  b8 GPUDevice::queue_present(const QueueHandle queue, const SemaphoreHandle wait_semaphore, const u32 image_index) {
 
-  b8 GPUDevice::queue_frame_submit(const frame::ID frame_id, const QueueHandle queue, const vk::CommandBuffer buffer_to_submit) {
+    VkPresentInfoKHR present_info{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
+    present_info.pSwapchains = &(_context.get_swapchain().get_swapchain());
+    present_info.swapchainCount = 1;
+    present_info.waitSemaphoreCount = 1;
+    present_info.pWaitSemaphores = &(_semaphore_pool[wait_semaphore].get_semaphore());
+    present_info.pImageIndices = &image_index;
+
+    VK_CHECKF(_context.get_device().get_device_function_table()
+        .vkQueuePresentKHR(_queue_pool[queue]
+          , &present_info) 
+        , "failed to present on queue %u"
+        , queue);
+
+    RX_END();
+  }
+
+  b8 GPUDevice::acquire_next_swapchain_index(u32* out_index, const SemaphoreHandle signal_semaphore) {
+    return _context.get_swapchain().acquire_next_image_index(&_context.get_device(), out_index, obtain_semaphore(signal_semaphore).get_semaphore());
+  }
+
+  b8 GPUDevice::queue_frame_submit(const frame::ID frame_id, const QueueHandle queue, const vk::CommandBuffer buffer_to_submit, const SemaphoreHandle wait_semaphore, const SemaphoreHandle signal_semaphore, const FenceHandle signal_fence_handle) {
     //const auto current_frame_count = _frame_counters[frame_id].add(1);
 
     VkCommandBufferSubmitInfo command_info{};
     command_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
     command_info.commandBuffer = buffer_to_submit.get_command_buffer();
 
-    VkSemaphoreSubmitInfo wait_info{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
+    SizedStackArray<VkSemaphoreSubmitInfo, 2> wait_infos;
+    wait_infos.clear();
+    if(wait_semaphore != lofi::index_type_max<SemaphoreHandle>::value) {
+      VkSemaphoreSubmitInfo& semaphore_info = *(wait_infos.push(1));
+      semaphore_info = {};
+      semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+      semaphore_info.semaphore = obtain_semaphore(wait_semaphore).get_semaphore();
+    }
+    VkSemaphoreSubmitInfo& semaphore_info = *(wait_infos.push(1));
+    semaphore_info = {};
+    semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+    
     // hacky workaround for the fact that the compute queue is static constexpr = 2 and transfer = 1
     //
-    wait_info.semaphore = _timelines[queue].get_semaphore();
-    wait_info.value = frame_id;
+    semaphore_info.semaphore = _timelines[queue].get_semaphore();
+    semaphore_info.value = frame_id;
 
-    VkSemaphoreSubmitInfo signal_info{VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
+    SizedStackArray<VkSemaphoreSubmitInfo, 2> signal_infos;
+    signal_infos.clear();
+    if(signal_semaphore != lofi::index_type_max<SemaphoreHandle>::value) {
+      VkSemaphoreSubmitInfo& signal_info = *(signal_infos.push(1));
+      signal_info = {};
+      signal_info.sType = {VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
+      signal_info.semaphore = obtain_semaphore(signal_semaphore).get_semaphore();
+    }
+    VkSemaphoreSubmitInfo& signal_info = *(signal_infos.push(1));
+    signal_info = {};
+    signal_info.sType = {VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO};
     signal_info.semaphore = _timelines[queue].get_semaphore();
     signal_info.value = frame_id + 1;
     
@@ -537,21 +579,19 @@ namespace roxi {
     // one primary command buffer per queue currently just 2 queues
     submit_info.commandBufferInfoCount = 1;
     submit_info.pCommandBufferInfos = &command_info;
-    submit_info.pSignalSemaphoreInfos = &signal_info;
-    submit_info.pWaitSemaphoreInfos = &wait_info;
-    submit_info.signalSemaphoreInfoCount = 1;
-    submit_info.waitSemaphoreInfoCount = 1;
+    submit_info.pSignalSemaphoreInfos = signal_infos.get_buffer();
+    submit_info.pWaitSemaphoreInfos = wait_infos.get_buffer();
+    submit_info.signalSemaphoreInfoCount = signal_infos.get_size();
+    submit_info.waitSemaphoreInfoCount = wait_infos.get_size();
 
-    RX_CHECKF(_context.get_device().get_device_function_table()
-      .vkQueueSubmit2(_queue_pool[queue], 1, &submit_info, VK_NULL_HANDLE)
+    VkFence signal_fence = signal_fence_handle == lofi::index_type_max<FenceHandle>::value ? VK_NULL_HANDLE : obtain_fence(signal_fence_handle).get_fence();
+    VK_CHECKF(_context.get_device().get_device_function_table()
+      .vkQueueSubmit2(_queue_pool[queue], 1, &submit_info, signal_fence)
       , "failed to properly submit primary command buffer with queue handle = %u"
       , queue);
 
     RX_END();
   }
-
-
-
 
 
   b8 GPUDevice::terminate() {
