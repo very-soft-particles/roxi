@@ -110,23 +110,25 @@ namespace roxi {
     DescriptorAllocation DescriptorBufferArena::allocate(Context* context, const u64 descriptor_count, const u64 descriptor_offset_alignment) {
       const u32 buffer_id = _buffer_count;
       _buffer_count += descriptor_count;
-      const auto descriptor_size = (descriptor_count * (_descriptor_size + descriptor_offset_alignment));
+      const auto aligned_descriptor_size = ALIGN_POW2(_descriptor_size, descriptor_offset_alignment);
+      const auto total_size = aligned_descriptor_size * descriptor_count;
       RX_TRACEF("attempting to allocate descriptor size = %llu, descriptor count = %llu, descriptor offset alignment = %llu, current descriptor buffer size = %llu, buffer size = %llu", _descriptor_size, descriptor_count, descriptor_offset_alignment, _descriptor_counter, get_buffer_byte_size());
 #if defined (RX_USE_VK_LOCK_FREE_MEMORY)
-      auto offset = _descriptor_counter.add(descriptor_size);
+      auto offset = _descriptor_counter.add(total_size + aligned_descriptor_size);
+      auto aligned_offset = ALIGN_POW2(offset, descriptor_offset_alignment);
       RX_ASSERT
         ( ((descriptor_size) < _buffer_size)
         , "descriptor buffer overflow!"
         );
 #else
-      auto offset = _descriptor_counter;
-      _descriptor_counter += descriptor_size;
+      auto aligned_offset = ALIGN_POW2(_descriptor_counter, descriptor_offset_alignment);
+      _descriptor_counter += total_size ;
       RX_ASSERT
         ( (_descriptor_counter < get_buffer_byte_size())
         , "descriptor buffer overflow!");
 #endif
       DescriptorAllocation result;
-      result.offset = ALIGN_POW2(offset, descriptor_offset_alignment);
+      result.offset = aligned_offset;
       result.size = _descriptor_size;
       result.id = buffer_id;
 

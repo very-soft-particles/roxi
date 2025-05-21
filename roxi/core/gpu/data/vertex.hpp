@@ -23,9 +23,8 @@ namespace roxi {
     f32 uv_x;
     glm::vec3 normal;
     f32 uv_y;
-    glm::vec4 colour;
-    Vertex(glm::vec3&& pos, glm::vec3&& norm, glm::vec4&& col, f32 n_uv_x, f32 n_uv_y)
-      : position(pos), uv_x(n_uv_x), normal(norm), uv_y(n_uv_y), colour(col) {} // maybe not?
+    Vertex(glm::vec3&& pos, glm::vec3&& norm, f32 n_uv_x, f32 n_uv_y)
+      : position(pos), uv_x(n_uv_x), normal(norm), uv_y(n_uv_y) {} // maybe not?
   };
 
 }		// -----  end of namespace roxi  ----- 

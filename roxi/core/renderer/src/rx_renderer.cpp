@@ -15,6 +15,9 @@
 // =====================================================================================
 #include "rx_renderer.hpp"
 #include "rx_resource_manager.hpp"
+#include "ubo.hpp"
+#include "vk_resource.hpp"
+#include <glm/fwd.hpp>
 
 namespace roxi {
   b8 TestRenderer::init(GPUDevice* device, const GPUDevice::QueueHandle handle) {
@@ -25,16 +28,15 @@ namespace roxi {
     RX_TRACE("creating commands");
     RX_CHECK(create_commands(_render_frame_count)
       , "failed to create commands in TestRenderer");
-    struct VertexUBO {
-      alignas(16)
-        glm::vec3 vertex_positions[3];
-    };
 
     RX_TRACE("setting vertex ubo data");
-    VertexUBO ubo_data{};
-    ubo_data.vertex_positions[0] = glm::vec3(-1.f, -1.f, -1.f);
-    ubo_data.vertex_positions[1] = glm::vec3(1.f, -1.f, -1.f);
-    ubo_data.vertex_positions[2] = glm::vec3(0.f, 1.f, -1.f);
+
+    struct VertexUBO {
+      alignas(16) struct {
+        alignas(16) glm::vec3 vertex_position;
+        alignas(4) u32 _pad0;
+      } data[3];
+    } ubo_data;
 
     vk::Extent<2> window_size = get_current_extent();
     // acquire from swapchain on each frame
@@ -48,22 +50,44 @@ namespace roxi {
     //  }
 
     // [0] = ubo for vertices, [1] = param data
-    const u32 ubo_handle = 0;
-    const u32 param_handle = 1;
+    const u32 param_handle = 0;
+    const u32 ubo_handle = 1;
+    //const u32 vertex_handle = 2;
+    //const u32 index_handle = 3;
     RX_TRACE("creating buffer infos");
-    gpu::ResourceInfo buffer_infos[2];
+    gpu::ResourceInfo buffer_infos[4];
+    buffer_infos[param_handle].type = gpu::ResourceType::DeviceUniformBuffer;
+    buffer_infos[param_handle].buffer.size = sizeof(ubo::TestDrawParams);
     buffer_infos[ubo_handle].type = gpu::ResourceType::HostUniformBuffer;
     buffer_infos[ubo_handle].buffer.size = sizeof(VertexUBO);
-    buffer_infos[param_handle].type = gpu::ResourceType::HostUniformBuffer;
-    buffer_infos[param_handle].buffer.size = sizeof(ubo::TestDrawParams);
+    //buffer_infos[vertex_handle].type = gpu::ResourceType::DeviceStorageBuffer;
+    //buffer_infos[vertex_handle].buffer.size = sizeof(Vertex) * resource::mesh_vertex_count(0);
+    //buffer_infos[index_handle].type = gpu::ResourceType::DeviceStorageBuffer;
+    //buffer_infos[index_handle].buffer.size = sizeof(u32) * resource::mesh_index_count(0);
 
     RX_TRACE("creating resources");
     RX_CHECK(create_resources(2, 0, buffer_infos, nullptr)
       , "failed to create commands in TestRenderer");
 
+    const vk::Buffer& param_buffer = get_resource_pool().obtain_buffer(param_handle);
     const vk::Buffer& ubo = get_resource_pool().obtain_buffer(ubo_handle);
+    //const vk::Buffer& vertex_buffer = get_resource_pool().obtain_buffer(vertex_handle);
+    //const vk::Buffer& index_buffer = get_resource_pool().obtain_buffer(index_handle);
 
-    RX_TRACE("mapping host ubo");
+//    ubo::Camera& camera = *((ubo::Camera*)camera_buffer.map());
+//    camera.projection = glm::perspective(glm::radians(45.0f), (f32)window_size.value.width / (f32)window_size.value.height, 0.1f, 100.f);
+//    camera.view = glm::lookAt
+//      ( glm::vec3(5.0f, 0.0f, 8.0f)
+//      , glm::vec3(0.f, 0.f, 0.f)
+//      , glm::vec3(0.f, 1.f, 0.f)
+//      );
+//    camera.projection[1][1] *= -1;
+
+    ubo_data.data[0].vertex_position = glm::vec3(0.f, -0.3f, 0.f);
+    ubo_data.data[1].vertex_position = glm::vec3(-0.3f, 0.3f, 0.f);
+    ubo_data.data[2].vertex_position = glm::vec3(0.3f, 0.3f, 0.f);
+
+    RX_TRACEF("mapping host ubo with pos[0] = {%f, %f, %f}, pos[1] = {%f, %f, %f}, pos[2] = {%f, %f, %f}", ubo_data.data[0].vertex_position.x, ubo_data.data[0].vertex_position.y, ubo_data.data[0].vertex_position.z, ubo_data.data[1].vertex_position.x, ubo_data.data[1].vertex_position.y, ubo_data.data[1].vertex_position.z, ubo_data.data[2].vertex_position.x, ubo_data.data[2].vertex_position.y, ubo_data.data[2].vertex_position.z);
     void* ubo_ptr = ubo.map();
     if(ubo_ptr == nullptr) {
       RX_ERROR("ubo mapping returned nullptr");
@@ -71,6 +95,8 @@ namespace roxi {
 
     RX_TRACE("copying data to mapped pointer");
     MEM_COPY(ubo_ptr, &ubo_data, sizeof(VertexUBO));
+
+    RX_TRACEF("host ubo mapped with pos[0] = {%f, %f, %f}, pos[1] = {%f, %f, %f}, pos[2] = {%f, %f, %f}", (*((VertexUBO*)ubo_ptr)).data[0].vertex_position.x, (*((VertexUBO*)ubo_ptr)).data[0].vertex_position.y, (*((VertexUBO*)ubo_ptr)).data[0].vertex_position.z, (*((VertexUBO*)ubo_ptr)).data[1].vertex_position.x, (*((VertexUBO*)ubo_ptr)).data[1].vertex_position.y, (*((VertexUBO*)ubo_ptr)).data[1].vertex_position.z, (*((VertexUBO*)ubo_ptr)).data[2].vertex_position.x, (*((VertexUBO*)ubo_ptr)).data[2].vertex_position.y, (*((VertexUBO*)ubo_ptr)).data[2].vertex_position.z);
 
     RX_TRACE("unmapping host ubo");
     ubo.unmap();
@@ -117,8 +143,12 @@ namespace roxi {
 
     RX_TRACE("allocating uniform descriptor");
     vk::DescriptorAllocation ubo_descriptor = get_descriptor_pool().allocate(vk::DescriptorBufferType::Uniform, 1);
+//    vk::DescriptorAllocation vertex_descriptor = get_descriptor_pool().allocate(vk::DescriptorBufferType::Storage, 1);
+//    vk::DescriptorAllocation index_descriptor = get_descriptor_pool().allocate(vk::DescriptorBufferType::Storage, 1);
 
-    draw_params.vertex_buffer_id = ubo_descriptor.get_buffer_id();
+//    draw_params.camera_id = camera_descriptor.get_buffer_id();
+//    draw_params.vertex_buffer_id = vertex_descriptor.get_buffer_id();
+//    draw_params.index_buffer_id = index_descriptor.get_buffer_id();
 
     RX_TRACE("allocating transfer buffer");
 
@@ -165,6 +195,7 @@ namespace roxi {
 
     get_command_pool(0).reset();
 
+
     RX_TRACE("exiting TestRenderer::init()");
     RX_END();
   }
@@ -201,8 +232,12 @@ namespace roxi {
 //    image_conversion.subresourceRange.baseArrayLayer = 0;
 //    image_conversion.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
 
+    VkViewport viewport{0.f, 0.f, (float)get_current_extent().value.width, (float)get_current_extent().value.height, 0.f, 1.f};
+    VkRect2D scissor{{0, 0}, {get_current_extent().value.width, get_current_extent().value.height}};
     command_buffer
       .begin()
+      .set_viewport(0, 1, &viewport)
+      .set_scissor(0, 1, &scissor)
       .begin_render_pass
         ( get_pipeline_pool()
             .obtain_render_pass(_render_pass_handle)
@@ -226,7 +261,7 @@ namespace roxi {
         , "failed to present image for frame_id = %u, and render image index = %u"
         , frame_id, render_image_index);
 
-    RX_TRACEF("exiting TestRenderer update for frame = %llu", frame_id);
+    RX_TRACEF("exiting TestRenderer update for frame = %llu, and render image index = %u", frame_id, render_image_index);
     return true;
   }
 //  const u32 ClusteredForwardRenderer::VerticesSize = sizeof(Vertex) * resource::vertex_count();

@@ -21,7 +21,7 @@
 #include "vk_swapchain.h"
 #include <vulkan/vulkan_core.h>
 
-#define VK_RESOURCE_TYPES(X) VK_BUFFER_TYPES(X) VK_IMAGE_TYPES(X)
+#define VK_RESOURCE_TYPES(X) VK_BUFFER_TYPES(X) VK_IMAGE_TYPES(X) X(Max)
 
 namespace roxi {
   namespace gpu {

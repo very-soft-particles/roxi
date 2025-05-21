@@ -166,6 +166,8 @@ namespace roxi {
 
     vk::ResourcePool::BufferHandle                               _ubo_handle;
     vk::ResourcePool::BufferHandle                            _params_handle;
+    vk::ResourcePool::BufferHandle                            _vertex_buffer;
+    vk::ResourcePool::BufferHandle                             _index_buffer;
 
     GPUDevice::LoaderHandle                                   _loader_handle;
 

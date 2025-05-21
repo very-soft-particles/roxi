@@ -15,6 +15,8 @@
 // =====================================================================================
 #pragma once
 #include "rx_vocab.h"
+#include "rx_string.hpp"
+#include "rx_container.hpp"
 #include "glm/gtc/quaternion.hpp"
 #include "aabb.hpp"
 
@@ -43,7 +45,13 @@ namespace roxi {
     
     struct TestDrawParams {
     alignas(4)
+      u32 camera_id;
+    alignas(4)
       u32 vertex_buffer_id;
+     alignas(4)
+      u32 index_buffer_id;
+     alignas(4)
+      u32 _pad0;
     };
 
   

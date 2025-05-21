@@ -25,10 +25,10 @@ namespace roxi {
         output.reset();
    
         for ( u32 i = 0; i < _num_render_targets; ++i ) {
-            output.color( _color_formats[ i ], _color_final_layouts[ i ], _color_operations[ i ] );
+            output.add_color( _color_formats[ i ], _color_final_layouts[ i ], _color_operations[ i ] );
         }
         if ( _depth_stencil_format != VK_FORMAT_UNDEFINED ) {
-            output.depth( _depth_stencil_format, _depth_stencil_final_layout );
+            output.set_depth( _depth_stencil_format, _depth_stencil_final_layout );
         }
     
         output.depth_operation = _depth_operation;
@@ -59,17 +59,7 @@ namespace roxi {
           break;
       }
   
-      switch ( output.stencil_operation ) {
-        case RenderPassOperationType::Load:
-          stencil_op = VK_ATTACHMENT_LOAD_OP_LOAD;
-          break;
-        case RenderPassOperationType::Clear:
-          stencil_op = VK_ATTACHMENT_LOAD_OP_CLEAR;
-          break;
-        default:
-          stencil_op = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-          break;
-      }
+      stencil_op = (VkAttachmentLoadOp)output.stencil_operation;
   
       // Color attachments
       u32 c = 0;
@@ -198,14 +188,14 @@ RenderPassOutput& RenderPassOutput::reset() {
     return *this;
 }
 
-RenderPassOutput& RenderPassOutput::color( VkFormat format, VkImageLayout layout, RenderPassOperationType load_op ) {
+RenderPassOutput& RenderPassOutput::add_color( VkFormat format, VkImageLayout layout, RenderPassOperationType load_op ) {
     color_formats[ num_color_formats ] = format;
     color_operations[ num_color_formats ] = load_op;
     color_final_layouts[ num_color_formats++ ] = layout;
     return *this;
 }
 
-RenderPassOutput& RenderPassOutput::depth( VkFormat format, VkImageLayout layout ) {
+RenderPassOutput& RenderPassOutput::set_depth( VkFormat format, VkImageLayout layout ) {
     depth_stencil_format = format;
     depth_stencil_final_layout = layout;
     return *this;
@@ -219,16 +209,15 @@ RenderPassOutput& RenderPassOutput::set_depth_stencil_operations( RenderPassOper
 }
 
 
-// RenderPassCreation /////////////////////////////////////////////////////
 RenderPassBuilder& RenderPassBuilder::reset() {
-    _num_render_targets = 0;
-    _depth_stencil_format = VK_FORMAT_UNDEFINED;
-    for ( u32 i = 0; i < s_max_image_outputs; ++ i ) {
-        _color_operations[ i ] = RenderPassOperationType::DontCare;
-    }
-    _depth_operation = _stencil_operation = RenderPassOperationType::DontCare;
+  _num_render_targets = 0;
+  _depth_stencil_format = VK_FORMAT_UNDEFINED;
+  for ( u32 i = 0; i < s_max_image_outputs; ++ i ) {
+      _color_operations[ i ] = RenderPassOperationType::DontCare;
+  }
+  _depth_operation = _stencil_operation = RenderPassOperationType::DontCare;
 
-    return *this;
+  return *this;
 }
 
 RenderPassBuilder& RenderPassBuilder::add_attachment( VkFormat format, VkImageLayout layout, RenderPassOperationType load_op ) {

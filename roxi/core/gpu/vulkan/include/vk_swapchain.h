@@ -65,7 +65,7 @@ namespace roxi {
         return _presentation_surface;
       }
 
-      VkExtent2D get_current_extent() const {
+      const VkExtent2D get_current_extent() const {
         return _current_extent;
       }
 

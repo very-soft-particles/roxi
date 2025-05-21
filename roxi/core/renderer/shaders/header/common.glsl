@@ -5,9 +5,9 @@
 #define PI 3.14159265358
 
 #define UBOSet 0
-#define SamplerSet 1
-#define StorageImageSet 2
-#define StorageBufferSet 3
+#define StorageBufferSet 1
+#define SamplerSet 2
+#define StorageImageSet 3
 
 // for easily accessing variables
 #define GET_VARIABLE_NAME(Name) g_##Name##_register

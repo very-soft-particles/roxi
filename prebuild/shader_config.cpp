@@ -568,7 +568,7 @@ b8 write_cpp_file(const char* file_path) {
   for(u64 i = 0; i < num_shaders; i++) {
     const u64 descriptor_set_count = shader_modules[i].mod.descriptor_set_count; 
     for(u64 j = 0; j < descriptor_set_count; j++) {
-      if(i != 0 || j != 0) {
+      if(j != 0) {
         file << ", ";
         if(!(j & 7)) {
           file << lofi::NewLine << lofi::Tab << lofi::Tab << lofi::Tab << lofi::Tab;
@@ -615,7 +615,7 @@ b8 write_cpp_file(const char* file_path) {
     for(u64 j = 0; j < descriptor_set_count; j++) {
       const u64 descriptor_set_binding_count = shader_modules[i].mod.descriptor_sets[j].binding_count;
       for(u64 k = 0; k < descriptor_set_binding_count; k++) {
-        if(i != 0 || j != 0 || k != 0) {
+        if(j != 0 || k != 0) {
           file << ", ";
           if(!(k & 3)) {
             file << lofi::NewLine << lofi::Tab << lofi::Tab << lofi::Tab << lofi::Tab;

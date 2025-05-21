@@ -18,6 +18,7 @@
 #include "vk_descriptors.hpp"
 #include "vk_pipeline.hpp"
 #include "vk_sync.hpp"
+#include <vulkan/vulkan_core.h>
 
 #define ROXI_COMMAND_TYPES(X) X(Graphics) X(Compute) X(Transfer) X(RayTracing) X(Max)
 
@@ -110,8 +111,7 @@ namespace roxi {
         return true;
       }
 
-      CommandBuffer& begin_render_pass(const RenderPass& render_pass, const u32 width, const u32 height, const Framebuffer& framebuffer, VkSubpassContents subpass_contents = VK_SUBPASS_CONTENTS_INLINE) {
-        VkClearValue clear_value {0.f, 0.f, 1.f, 1.f};
+      CommandBuffer& begin_render_pass(const RenderPass& render_pass, const u32 width, const u32 height, const Framebuffer& framebuffer, VkClearValue clear_value = {0.f, 0.f, 1.f, 1.f}, VkSubpassContents subpass_contents = VK_SUBPASS_CONTENTS_INLINE) {
         VkRenderPassBeginInfo begin_info{};
         begin_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
         begin_info.pNext = nullptr;
@@ -140,6 +140,18 @@ namespace roxi {
         return *this;
       }
 
+      CommandBuffer& set_viewport(const u32 first_viewport, const u32 viewport_count, const VkViewport* viewports) {
+        _context->get_device().get_device_function_table()
+          .vkCmdSetViewport(_buffer, first_viewport, viewport_count, viewports);
+        return *this;
+      }
+
+      CommandBuffer& set_scissor(const u32 first_scissor, const u32 scissor_count, const VkRect2D* scissors) {
+        _context->get_device().get_device_function_table()
+          .vkCmdSetScissor(_buffer, first_scissor, scissor_count, scissors);
+        return *this;
+      }
+
       CommandBuffer& begin(VkCommandBufferInheritanceInfo* inheritance_info = nullptr) {
         VkCommandBufferBeginInfo begin_info{};
         begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -156,7 +168,7 @@ namespace roxi {
         if(_current_pipeline == &pipeline) {
           return *this;
         }
-        RX_TRACE("setting VkPipeline");
+        RX_TRACEF("setting VkPipeline to %llx", PTR2INT(pipeline.get_pipeline()));
         _current_pipeline = &(Pipeline&)pipeline;
         RX_TRACE("vkCmdBindPipeline");
         _context->get_device().get_device_function_table()
@@ -199,7 +211,7 @@ namespace roxi {
           if(pool.obtain_arena(DescriptorBufferType(i)).get_max_descriptor_count() > 0) {
             RX_TRACEF("setting descriptor offset at index = %u, with offset = %u", buffer_count, *(u32*)(offsets + buffer_count)); 
             _context->get_device().get_device_function_table()
-              .vkCmdSetDescriptorBufferOffsetsEXT(_buffer, _current_pipeline->get_pipeline_bind_point(), _current_pipeline->get_pipeline_layout(), buffer_count, 1, indices + buffer_count, offsets + buffer_count);
+              .vkCmdSetDescriptorBufferOffsetsEXT(_buffer, _current_pipeline->get_pipeline_bind_point(), _current_pipeline->get_pipeline_layout(), i, 1, indices + buffer_count, offsets + buffer_count);
             buffer_count++;
           }
         }

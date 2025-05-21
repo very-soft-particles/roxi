@@ -111,9 +111,9 @@ namespace roxi {
       return graphics::resources::total_num_indices;
     }
 
-    static void* get_vertices() {
+    static f32* get_vertices() {
       // TODO :: fix this
-      return (void*)graphics::resources::vertices;
+      return (f32*)graphics::resources::vertices;
 
     }
 
@@ -121,12 +121,16 @@ namespace roxi {
       return graphics::resources::obj_sizes[mesh_index];
     }
 
+    static u64 mesh_index_count(u64 mesh_index) {
+      return graphics::resources::obj_index_count[mesh_index];
+    }
+
     static String mesh_name(u64 mesh_index) {
       return lofi::str_cstring(graphics::resources::obj_names[mesh_index]);
     }
 
     static const f32* mesh_vertices(u64 mesh_index) {
-      return static_cast<const f32*>(graphics::resources::vertices[graphics::resources::obj_handles[mesh_index]]);
+      return graphics::resources::vertices[graphics::resources::obj_handles[mesh_index]];
     }
 
     static const u32* mesh_indices(u64 mesh_index) {

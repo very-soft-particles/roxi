@@ -97,6 +97,12 @@ namespace roxi {
     public:
       b8 terminate();
 
+      const VkQueue get_queue(const u32 handle) const {
+        VkQueue result = VK_NULL_HANDLE;
+        _device_function_table.vkGetDeviceQueue(_device, _device_queue_indices[handle].queue_family_index, _device_queue_indices[handle].queue_id, &result);
+        return result;
+      }
+
       const VkQueue get_queue(const u32 handle) {
         VkQueue result = VK_NULL_HANDLE;
         _device_function_table.vkGetDeviceQueue(_device, _device_queue_indices[handle].queue_family_index, _device_queue_indices[handle].queue_id, &result);

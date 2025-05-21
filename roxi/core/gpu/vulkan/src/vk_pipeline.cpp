@@ -76,6 +76,15 @@ namespace roxi {
       _vertex_binding_description.clear();
       _shadow_pass = false;
       _discard_fragments = false;
+
+      _dynamic_states[0] = VK_DYNAMIC_STATE_VIEWPORT;
+      _dynamic_states[1] = VK_DYNAMIC_STATE_SCISSOR;
+
+      _dynamic_state_info = VkPipelineDynamicStateCreateInfo{ VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO
+      , nullptr
+      , 0
+      , 2
+      , _dynamic_states };
       return true;
     }
 
@@ -159,11 +168,11 @@ namespace roxi {
       return result;
     }
 
-    b8 PipelinePool::create_pipelines(Context* context, u32 graphics_pipeline_count, u32 compute_pipeline_count, PipelineCreation<PipelineType::Graphics>* graphics_creations, PipelineCreation<PipelineType::Graphics>* compute_creations) {     // NOLINT
-     
-
-     return true;
-    }
+//    b8 PipelinePool::create_pipelines(Context* context, u32 graphics_pipeline_count, u32 compute_pipeline_count, PipelineCreation<PipelineType::Graphics>* graphics_creations, PipelineCreation<PipelineType::Graphics>* compute_creations) {     // NOLINT
+//     
+//
+//     return true;
+//    }
 
 
     b8 PipelineCreation<PipelineType::Graphics>::set_render_pass(VkRenderPass renderpass) {
@@ -195,6 +204,14 @@ namespace roxi {
     }
 
     VkGraphicsPipelineCreateInfo PipelineCreation<PipelineType::Graphics>::get_create_info(u32 subpass_index, RenderPass* render_pass) {
+      _color_blend_attachment = {};
+      _color_blend_attachment.colorWriteMask = 
+        VK_COLOR_COMPONENT_R_BIT |
+        VK_COLOR_COMPONENT_G_BIT |
+        VK_COLOR_COMPONENT_B_BIT |
+        VK_COLOR_COMPONENT_A_BIT;
+      _color_blend_attachment.blendEnable = VK_FALSE;
+
       _color_blend_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
       _color_blend_create_info.pNext = nullptr;
       _color_blend_create_info.flags = 0;
@@ -209,8 +226,8 @@ namespace roxi {
       _rasterizer.depthClampEnable = VK_FALSE;
       _rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
       _rasterizer.lineWidth = 1.f;
-      //_rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-      _rasterizer.cullMode = VK_CULL_MODE_NONE;
+      _rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+      //_rasterizer.cullMode = VK_CULL_MODE_NONE;
       _rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
       _rasterizer.depthBiasEnable = _shadow_pass ? VK_TRUE : VK_FALSE;
 
@@ -243,7 +260,15 @@ namespace roxi {
       _multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
       _multisampling.sampleShadingEnable = VK_FALSE;
       _multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-      
+
+      _depth_stencil = {};
+      _depth_stencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+      _depth_stencil.depthTestEnable = _depth_pass ? VK_TRUE : VK_FALSE;
+      _depth_stencil.depthWriteEnable = _depth_pass ? VK_TRUE : VK_FALSE;
+      _depth_stencil.depthCompareOp = VK_COMPARE_OP_LESS;
+      _depth_stencil.depthBoundsTestEnable = VK_FALSE;
+      _depth_stencil.stencilTestEnable = _depth_pass ? VK_TRUE : VK_FALSE;
+
       VkGraphicsPipelineCreateInfo create_info{};
       create_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
       create_info.pNext = nullptr;
@@ -262,6 +287,8 @@ namespace roxi {
       create_info.pRasterizationState = &_rasterizer;
       create_info.pViewportState = &_viewport_state;
       create_info.pInputAssemblyState = &_input_assembly;
+      create_info.pDepthStencilState = &_depth_stencil;
+      create_info.pDynamicState = &_dynamic_state_info;
       create_info.renderPass = _render_pass;
 
       return create_info;
@@ -320,11 +347,11 @@ namespace roxi {
         pipelines[i]._pipeline = _pipelines[i];
         pipelines[i]._dispatch_type = dispatch_types[i];
         if(i < num_compute_pipelines) {
-          RX_TRACEF("compute pipeline at %llu", i);
+          RX_TRACEF("compute pipeline at %llu = %llx", i, PTR2INT(_pipelines[i]));
           pipelines[i]._layout = compute_infos[i].layout;
           continue;
         }
-        RX_TRACEF("graphics pipeline at %llu", i);
+        RX_TRACEF("graphics pipeline at %llu = %llx", i, PTR2INT(_pipelines[i]));
         pipelines[i]._layout = graphics_infos[i - num_compute_pipelines].layout;
       }
       RX_TRACE("freeing pipelines");
@@ -334,29 +361,29 @@ namespace roxi {
       return true;
     }
 
-    PipelineCreation<PipelineType::Graphics> PipelinePoolBuilder::add_graphics_pipeline(const PipelineInfo info) {
-      PipelineCreation<PipelineType::Graphics> creation{};
+    b8 PipelinePoolBuilder::add_graphics_pipeline(const PipelineInfo info) {
+      PipelineCreation<PipelineType::Graphics>& creation = *(_graphics_pipelines.push(1));
       creation.init();
 
       creation.add_viewport(0.f, 0.f, (float)info.graphics.extent_x, (float)info.graphics.extent_y, 0.f, 1.f);
       creation.add_scissor({0,0}, {info.graphics.extent_x, info.graphics.extent_y});
 
       const u64 vertex_shader_index = resource::helpers::find_shader_index_from_shader_name((const char*)info.graphics.vertex_shader_name);
-      RX_RETURN(vertex_shader_index != MAX_u64
+      RX_CHECK(vertex_shader_index != MAX_u64
           , "failed to find vertex shader"
-          , PipelineCreation<PipelineType::Graphics>{});
+          );
 
       const u64 fragment_shader_index = resource::helpers::find_shader_index_from_shader_name((const char*)info.graphics.fragment_shader_name);
-      RX_RETURN(fragment_shader_index != MAX_u64
+      RX_CHECK(fragment_shader_index != MAX_u64
           , "failed to find vertex shader"
-          , PipelineCreation<PipelineType::Graphics>{});
+          );
 
-      RX_RETURN(creation.set_dispatch_type(info.type), "failed to set correct dispatch type when adding graphics pipeline"
-          , PipelineCreation<PipelineType::Graphics>{});
+      RX_CHECK(creation.set_dispatch_type(info.type), "failed to set correct dispatch type when adding graphics pipeline"
+          );
 
-      RX_RETURN(creation.set_render_pass_handle(info.graphics.render_pass_id)
+      RX_CHECK(creation.set_render_pass_handle(info.graphics.render_pass_id)
           , "failed to set render pass handle when adding graphics pipeline"
-          , PipelineCreation<PipelineType::Graphics>{});
+          );
       RX_TRACE("getting vertex spirv file");
       File vertex_spirv_file = resource::shader_spirv_file(vertex_shader_index);
       u64 spirv_size = vertex_spirv_file.get_size();
@@ -365,9 +392,8 @@ namespace roxi {
 
       u32* spirv_buffer = (u32*)ALLOCATE(spirv_size);
 
-      RX_RETURN(vertex_spirv_file.copy_all_to_buffer((u8*)spirv_buffer)
+      RX_CHECK(vertex_spirv_file.copy_all_to_buffer((u8*)spirv_buffer)
         , "failed to copy vertex spirv file to buffer"
-        , PipelineCreation<PipelineType::Graphics>{}
         );
 
       VkShaderModuleCreateInfo shader_create_info
@@ -379,14 +405,14 @@ namespace roxi {
       };
 
       VkShaderModule   mod;
-      VK_RETURN_VAL(_context->get_device().get_device_function_table()
+      VK_CHECK(_context->get_device().get_device_function_table()
         .vkCreateShaderModule(_context->get_device().get_device()
             , &shader_create_info
             , CALLBACKS()
             , &mod
             )
         , "failed to create vertex shader module"
-        , PipelineCreation<PipelineType::Graphics>{});
+        );
 
       creation.set_vertex_shader(mod);
 
@@ -405,22 +431,21 @@ namespace roxi {
 
       spirv_buffer = (u32*)ALLOCATE(spirv_size);
 
-      RX_RETURN(fragment_spirv_file.copy_all_to_buffer(spirv_buffer)
+      RX_CHECK(fragment_spirv_file.copy_all_to_buffer(spirv_buffer)
         , "failed to copy fragment spirv file to buffer"
-        , PipelineCreation<PipelineType::Graphics>{}
         );
 
       shader_create_info.codeSize = spirv_size;
       shader_create_info.pCode = spirv_buffer;
 
-      VK_RETURN_VAL(_context->get_device().get_device_function_table()
+      VK_CHECK(_context->get_device().get_device_function_table()
         .vkCreateShaderModule(_context->get_device().get_device()
             , &shader_create_info
             , CALLBACKS()
             , &mod
             )
         , "failed to create fragment shader module"
-        , PipelineCreation<PipelineType::Graphics>{});
+        );
 
       creation.set_fragment_shader(mod);
 
@@ -433,14 +458,13 @@ namespace roxi {
         fragment_spirv_file.close();
 
       RX_TRACE("returning from pipeline create");
-      return creation;
+      RX_END();
     }
   
-    PipelineCreation<PipelineType::Compute> PipelinePoolBuilder::add_compute_pipeline(const PipelineInfo info) {
-      PipelineCreation<PipelineType::Compute> creation{};
-      RX_RETURN(creation.set_dispatch_type(info.type)
+    b8 PipelinePoolBuilder::add_compute_pipeline(const PipelineInfo info) {
+      PipelineCreation<PipelineType::Compute>& creation = *(_compute_pipelines.push(1));
+      RX_CHECK(creation.set_dispatch_type(info.type)
         , "failed to set correct dispatch type when adding compute pipeline"
-        , PipelineCreation<PipelineType::Compute>{}
         );
         
       const u64 shader_index = resource::helpers::find_shader_index_from_shader_name((const char*)info.compute.shader_name);
@@ -453,9 +477,8 @@ namespace roxi {
 
       u32* spirv_buffer = (u32*)ALLOCATE(spirv_size);
 
-      RX_RETURN(spirv_file.copy_all_to_buffer((u8*)spirv_buffer)
+      RX_CHECK(spirv_file.copy_all_to_buffer((u8*)spirv_buffer)
         , "failed to copy spirv file to buffer"
-        , PipelineCreation<PipelineType::Compute>{}
         );
 
       VkShaderModuleCreateInfo shader_create_info
@@ -468,32 +491,32 @@ namespace roxi {
  
       VkShaderModule mod;
  
-      VK_RETURN_VAL(_context->get_device().get_device_function_table()
+      VK_CHECK(_context->get_device().get_device_function_table()
         .vkCreateShaderModule(_context->get_device().get_device()
             , &shader_create_info
             , CALLBACKS()
             , &mod
             )
         , "failed to create compute shader module"
-        , PipelineCreation<PipelineType::Compute>{});
+        );
  
       creation.set_shader(mod);
 
       FREE((void*)spirv_buffer);
       spirv_file.close();
 
-      return creation;
+      RX_END();
     }
 
     const PipelinePool::PipelineHandle PipelinePoolBuilder::add_pipeline(const PipelineInfo info) {
         if (get_pipeline_type_from_dispatch_type(info.type) == PipelineType::Graphics) {
           RX_TRACEF("vertex shader name in add_pipeline = %s", info.graphics.vertex_shader_name);
           const auto result = _graphics_pipelines.get_size();
-          *(_graphics_pipelines.push(1)) = add_graphics_pipeline(info);
+          add_graphics_pipeline(info);
           return result;
         } else if (get_pipeline_type_from_dispatch_type(info.type) == PipelineType::Compute) {
           const auto result = _compute_pipelines.get_size();
-          *(_compute_pipelines.push(1)) = add_compute_pipeline(info);
+          add_compute_pipeline(info);
           return result;
         }
         return PipelinePool::PipelineHandleMax;

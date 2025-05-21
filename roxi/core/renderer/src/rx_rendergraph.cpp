@@ -15,6 +15,7 @@
 // =====================================================================================
 #include "../include/rx_rendergraph.hpp"
 #include "rx_rendergraph.hpp"
+#include "rx_allocator.hpp"
 #include "vk_resource.hpp"
 #include <vcruntime.h>
 

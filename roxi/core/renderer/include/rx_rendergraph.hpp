@@ -88,7 +88,7 @@ namespace roxi {
   private:
     static u64 get_size_from_resource_type( const gpu::ResourceInfo& info) {
       lofi::dispatcher dispatch 
-        { lofi::IdxV<(u64)gpu::ResourceType::NumTypes>
+        { lofi::IdxV<(u64)gpu::ResourceType::Max>
         , [&]<u64 I>(lofi::IdxT<I>) {
           static constexpr gpu::ResourceType type = (gpu::ResourceType)I;
           if constexpr ( resource_is_buffer_type<type>() ) 
@@ -109,7 +109,6 @@ namespace roxi {
     Array<GPUGraphNode> nodes{nullptr};
     Array<GPUGraphNodeHandle> sorted_nodes{nullptr};
   };
-  
 
   class GPUGraphBuilder {
   public:

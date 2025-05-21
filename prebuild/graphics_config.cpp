@@ -101,6 +101,7 @@ b8 write_cpp_file(Obj* objs, u32 num_objs, const char* file_path) {
   }
   file << "\n\t\t\t};\n"
   << "\n\t\t\tinline constexpr u64 total_num_indices = " << indices_start_index << ';' << lofi::NewLine
+  << "\n\t\t\t"
   << "inline constexpr u64 obj_sizes[] {\n\t\t\t\t";
   for(size_t i = 0; i < num_objs; i++) {
     if(i != 0) [[likely]] {
@@ -110,6 +111,17 @@ b8 write_cpp_file(Obj* objs, u32 num_objs, const char* file_path) {
       }
     }
     file << objs[i].vertices.get_size();
+  }
+  file << "\n\t\t\t};\n\n\t\t\t"
+  << "inline constexpr u64 obj_index_count[] {\n\t\t\t\t";
+  for(size_t i = 0; i < num_objs; i++) {
+    if(i != 0) [[likely]] {
+      file << ", ";
+      if(!(i & 7)) {
+        file << "\n\t\t\t\t";
+      }
+    }
+    file << objs[i].indices.get_size();
   }
   file << "\n\t\t\t};\n\n\t\t\t"
   << "inline constexpr const char* obj_names[] {\n\t\t\t\t";
@@ -133,6 +145,11 @@ b8 write_cpp_file(Obj* objs, u32 num_objs, const char* file_path) {
     file << "\"" << (char*)name.str << "\"";
   }
   file << "\n\t\t\t};\n\n\t\t\t"
+
+  << "// position[3], normal[3], tex_coord[2]"
+
+  << "\n\n\t\t\t"
+
   << "inline constexpr float vertices[][8] {\n\t\t\t\t";
   size_t accum = 0;
   for(size_t i = 0; i < num_objs; i++) {

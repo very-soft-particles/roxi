@@ -90,8 +90,6 @@ namespace roxi {
 
     WINDOW_PREFIX::Window* window_ptr = (WINDOW_PREFIX::Window*)window;
     const auto extents = window_ptr->get_extents();
-    _current_width = extents.width;
-    _current_height = extents.height;
 
     vk::ContextBuilder context_builder;
 
@@ -430,6 +428,11 @@ namespace roxi {
     _staging_buffer_mapped_pointer = resource_pool.obtain_buffer(StagingBufferHandle).map();
   }
 
+  void GPUDevice::Loader::clear() {
+    _buffer_copies.clear();
+    _current_buffer_top = 0;
+  }
+
   // reactor job, may wait fiber
   const b8 GPUDevice::Loader::transfer(GPUDevice* device) {
     const auto copy_count = _buffer_copies.get_size();
@@ -654,7 +657,7 @@ namespace roxi {
   }
 
   const vk::Extent<2> GPUDevice::get_current_extent() const {
-    return vk::Extent<2>{{_current_width, _current_height}};
+    return vk::Extent<2>{{get_swapchain().get_current_extent().width, get_swapchain().get_current_extent().height}};
   }
 
   b8 Renderer::init(GPUDevice* device, const GPUDevice::QueueHandle queue_handle) {

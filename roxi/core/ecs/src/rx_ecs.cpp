@@ -13,3 +13,6 @@
 //   Organization:  Roxi Psychotronics
 //
 // =====================================================================================
+#include "rx_ecs.hpp"
+
+extern template class lofi::ecs::Manager<lofi::ecs::Config<roxi::RoxiECSConfigID>>;

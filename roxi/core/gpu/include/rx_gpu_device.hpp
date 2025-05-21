@@ -144,6 +144,8 @@ namespace roxi {
     public:
       b8 init(const GPUDevice::QueueHandle queue_handle);
 
+      void clear();
+
       void create_resources(GPUDevice* device);
 
       // reactor job, may wait fiber
@@ -273,6 +275,10 @@ namespace roxi {
       return _context.get_swapchain();
     }
 
+    const vk::Swapchain& get_swapchain() const {
+      return _context.get_swapchain();
+    }
+
     b8 terminate();
 
   private:
@@ -305,9 +311,6 @@ namespace roxi {
 
     // semaphores
     Array<vk::Semaphore>                                                        _semaphore_pool;
-
-    u32 _current_width = 0;
-    u32 _current_height = 0;
   };
 
   class Renderer {

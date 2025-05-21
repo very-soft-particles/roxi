@@ -134,8 +134,14 @@ namespace roxi {
       VkRenderPass _render_pass = VK_NULL_HANDLE;
       VkPipelineViewportStateCreateInfo _viewport_state{};
       u32 _render_pass_handle = MAX_u32;
+
       b8 _discard_fragments = true;
       b8 _shadow_pass = false;
+      b8 _depth_pass = false;
+
+      VkDynamicState _dynamic_states[2];
+
+      VkPipelineDynamicStateCreateInfo _dynamic_state_info;
 
     public:
       b8 init();
@@ -150,6 +156,11 @@ namespace roxi {
       b8 set_render_pass_handle(u32 render_pass_handle) {
         _render_pass_handle = render_pass_handle;
         return true;
+      }
+
+      b8 set_depth_pass(const b8 enable) {
+        _depth_pass = enable;
+        RX_END();
       }
 
       b8 add_vertex_binding(u32 binding = 0, u32 stride = 0, VkVertexInputRate input_rate = VK_VERTEX_INPUT_RATE_VERTEX);
@@ -502,7 +513,7 @@ namespace roxi {
       b8 terminate(Context* context);
 
     private:
-      b8 create_pipelines(Context* context, u32 num_graphics_pipelines, u32 num_compute_pipelines, PipelineCreation<PipelineType::Graphics>* graphics_creations, PipelineCreation<PipelineType::Graphics>* compute_creations);
+      //b8 create_pipelines(Context* context, u32 num_graphics_pipelines, u32 num_compute_pipelines, PipelineCreation<PipelineType::Graphics>* graphics_creations, PipelineCreation<PipelineType::Graphics>* compute_creations);
 
     };
    
@@ -521,9 +532,9 @@ namespace roxi {
       };
       Array<SpecializationInfo> _specialization_infos;
 
-      PipelineCreation<PipelineType::Graphics> add_graphics_pipeline(const PipelineInfo info);
+      b8 add_graphics_pipeline(const PipelineInfo info);
  
-      PipelineCreation<PipelineType::Compute> add_compute_pipeline(const PipelineInfo info);
+      b8 add_compute_pipeline(const PipelineInfo info);
 
     public:
       using PipelineHandle = PipelinePool::PipelineHandle;

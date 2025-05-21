@@ -18,7 +18,7 @@
 #include "vk_resource.hpp"
 #include <vulkan/vulkan_core.h>
 
-#define RENDER_PASS_OPERATION_TYPES(X) X(DontCare) X(Load) X(Clear) X(MaxType)
+#define RENDER_PASS_OPERATION_TYPES(X) X(Load) X(Clear) X(DontCare) X(None) X(MaxType)
 
 namespace roxi {
 
@@ -57,7 +57,6 @@ namespace roxi {
     //
     //
     struct RenderPassOutput {
-    
         VkFormat                        color_formats[ s_max_image_outputs ];
         VkImageLayout                   color_final_layouts[ s_max_image_outputs ];
         RenderPassOperationType         color_operations[ s_max_image_outputs ];
@@ -71,8 +70,8 @@ namespace roxi {
         RenderPassOperationType       stencil_operation       = RenderPassOperationType::DontCare;
     
         RenderPassOutput&               reset();
-        RenderPassOutput&               color( VkFormat format, VkImageLayout layout, RenderPassOperationType load_op);
-        RenderPassOutput&               depth( VkFormat format, VkImageLayout layout );
+        RenderPassOutput&               add_color( VkFormat format, VkImageLayout layout, RenderPassOperationType load_op);
+        RenderPassOutput&               set_depth( VkFormat format, VkImageLayout layout );
         RenderPassOutput&               set_depth_stencil_operations( RenderPassOperationType depth, RenderPassOperationType stencil );
     
     }; // struct RenderPassOutput

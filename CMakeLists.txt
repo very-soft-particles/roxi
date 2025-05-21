@@ -14,6 +14,8 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/config/shader_config.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/config/compile_shaders.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/config/compile_prebuilds.cmake")
 
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 set(LOFI_NO_TESTS)
 

@@ -42,6 +42,24 @@ namespace roxi {
       ~Context() {};
       b8 init(void* wnd);
       b8 terminate();
+      const Library& get_library() const {
+        return _library;
+      }
+      const Instance& get_instance() const {
+        return _instance;
+      }
+      const Device& get_device() const {
+        return _device;
+      }
+      const Swapchain& get_swapchain() const {
+        return _swapchain;
+      }
+      const Surface& get_presentation_surface() const {
+        return _surface;
+      }
+      const VkQueue get_queue(const u32 queue_handle) const {
+        return _device.get_queue(queue_handle);
+      }
       const Library& get_library() {
         return _library;
       }
